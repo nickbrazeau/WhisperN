@@ -270,17 +270,19 @@ for line in "${phrases[@]}"; do
             2>"$errlog" &
         ff_pid=$!
 
-        # Let the device open before the user speaks.
+        # Let the device open, then confirm ffmpeg is still running.
+        #
+        # Do NOT test the output file here. ffmpeg buffers the WAV and writes
+        # it when the stream is finalised, so the file stays 0 bytes for the
+        # entire recording no matter how long it runs. A file-size check as a
+        # readiness signal aborts every take. Process liveness is the only
+        # signal available mid-recording; the device itself was already
+        # validated by preflight().
         sleep 0.5
-
-        # Treat "no growing output file" as failure rather than probing the
-        # process. A live ffmpeg that is not writing is just as useless, and
-        # process-liveness checks have proven unreliable here.
-        if [ ! -s "$wav" ]; then
-            kill -INT "$ff_pid" 2>/dev/null
+        if ! kill -0 "$ff_pid" 2>/dev/null; then
             wait "$ff_pid" 2>/dev/null
             echo
-            echo "error: recording produced no data. ffmpeg said:" >&2
+            echo "error: recording failed to start. ffmpeg said:" >&2
             echo >&2
             sed 's/^/    /' "$errlog" >&2
             echo >&2
