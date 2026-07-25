@@ -38,12 +38,26 @@ _NUMBER_WORDS = {
 }
 
 
-def tokenize(text: str, *, normalize_numbers: bool = False) -> list[str]:
-    """Lowercase, strip punctuation, split on whitespace."""
+def tokenize(
+    text: str,
+    *,
+    normalize_numbers: bool = False,
+    normalize_hyphens: bool = False,
+) -> list[str]:
+    """Lowercase, strip punctuation, split on whitespace.
+
+    ``normalize_hyphens`` splits hyphenated compounds into separate tokens on
+    both sides, so ``whole-genome`` and ``whole genome`` compare equal. Whisper
+    is inconsistent about compound hyphenation; treated as a substitution it
+    also shifts the token count, which inflates the error rate well beyond the
+    single real difference.
+    """
     text = unicodedata.normalize("NFKC", text).lower()
     # Keep intra-word hyphens (methicillin-susceptible) and decimal points (0.9).
     text = re.sub(r"[^\w\s.\-]", " ", text)
     text = re.sub(r"(?<!\d)\.(?!\d)", " ", text)  # sentence periods, not decimals
+    if normalize_hyphens:
+        text = text.replace("-", " ")
     tokens = text.split()
     tokens = [t.strip("-") for t in tokens if t.strip("-")]
     if normalize_numbers:
@@ -51,10 +65,18 @@ def tokenize(text: str, *, normalize_numbers: bool = False) -> list[str]:
     return tokens
 
 
-def levenshtein(ref: list[str], hyp: list[str]) -> tuple[int, int, int]:
-    """Return (substitutions, deletions, insertions) via edit-distance backtrace."""
+def align(ref: list[str], hyp: list[str]) -> list[tuple[str, str | None, str | None]]:
+    """Align two token sequences by edit distance.
+
+    Returns a list of (op, ref_token, hyp_token) where op is one of
+    ``=``, ``s`` (substitution), ``d`` (deletion), ``i`` (insertion).
+
+    Both scoring and the human-readable diff are derived from this single
+    alignment. Comparing the sequences positionally instead would misreport
+    every utterance after a token-count change -- one hyphen split would
+    cascade into an apparent error on every following word.
+    """
     n, m = len(ref), len(hyp)
-    # dp[i][j] = (cost, op) where op is the edit taken to reach this cell.
     dp = [[(0, "")] * (m + 1) for _ in range(n + 1)]
     for i in range(1, n + 1):
         dp[i][0] = (i, "d")
@@ -72,28 +94,45 @@ def levenshtein(ref: list[str], hyp: list[str]) -> tuple[int, int, int]:
             op = "s" if best == sub else ("d" if best == dele else "i")
             dp[i][j] = (best, op)
 
-    s = d = ins_count = 0
+    ops: list[tuple[str, str | None, str | None]] = []
     i, j = n, m
     while i > 0 or j > 0:
         op = dp[i][j][1]
-        if op == "=":
-            i, j = i - 1, j - 1
-        elif op == "s":
-            s += 1
+        if op in ("=", "s"):
+            ops.append((op, ref[i - 1], hyp[j - 1]))
             i, j = i - 1, j - 1
         elif op == "d":
-            d += 1
+            ops.append((op, ref[i - 1], None))
             i -= 1
         else:
-            ins_count += 1
+            ops.append((op, None, hyp[j - 1]))
             j -= 1
-    return s, d, ins_count
+    ops.reverse()
+    return ops
 
 
-def score_pair(ref_text: str, hyp_text: str, *, normalize_numbers: bool) -> dict:
-    ref = tokenize(ref_text, normalize_numbers=normalize_numbers)
-    hyp = tokenize(hyp_text, normalize_numbers=normalize_numbers)
-    s, d, i = levenshtein(ref, hyp)
+def counts(ops: list[tuple[str, str | None, str | None]]) -> tuple[int, int, int]:
+    """Return (substitutions, deletions, insertions) from an alignment."""
+    s = sum(1 for o, _, _ in ops if o == "s")
+    d = sum(1 for o, _, _ in ops if o == "d")
+    i = sum(1 for o, _, _ in ops if o == "i")
+    return s, d, i
+
+
+def score_pair(
+    ref_text: str,
+    hyp_text: str,
+    *,
+    normalize_numbers: bool = False,
+    normalize_hyphens: bool = False,
+) -> dict:
+    opts = {
+        "normalize_numbers": normalize_numbers,
+        "normalize_hyphens": normalize_hyphens,
+    }
+    ref = tokenize(ref_text, **opts)
+    hyp = tokenize(hyp_text, **opts)
+    s, d, i = counts(align(ref, hyp))
     errors = s + d + i
     return {
         "ref_words": len(ref),
@@ -106,15 +145,20 @@ def score_pair(ref_text: str, hyp_text: str, *, normalize_numbers: bool) -> dict
 
 
 def diff_tokens(ref_text: str, hyp_text: str) -> list[str]:
-    """Human-readable list of differing tokens, for the error report."""
-    ref = tokenize(ref_text)
-    hyp = tokenize(hyp_text)
+    """Human-readable differences, derived from the edit alignment.
+
+    Only the actual edits are listed. A token-count change no longer cascades
+    into spurious differences on every following word.
+    """
+    ops = align(tokenize(ref_text), tokenize(hyp_text))
     out = []
-    for a, b in zip(ref, hyp):
-        if a != b:
+    for op, a, b in ops:
+        if op == "s":
             out.append(f"{a} -> {b}")
-    if len(ref) != len(hyp):
-        out.append(f"(length {len(ref)} -> {len(hyp)})")
+        elif op == "d":
+            out.append(f"{a} -> (deleted)")
+        elif op == "i":
+            out.append(f"(inserted) -> {b}")
     return out
 
 
@@ -142,8 +186,10 @@ def main() -> int:
             "id": stem,
             "reference": ref_text,
             "hypothesis": hyp_text,
-            "literal": score_pair(ref_text, hyp_text, normalize_numbers=False),
+            "literal": score_pair(ref_text, hyp_text),
             "semantic": score_pair(ref_text, hyp_text, normalize_numbers=True),
+            "content": score_pair(ref_text, hyp_text,
+                                  normalize_numbers=True, normalize_hyphens=True),
             "differences": diff_tokens(ref_text, hyp_text),
         })
 
@@ -163,6 +209,7 @@ def main() -> int:
         "utterances": len(results),
         "literal": aggregate("literal"),
         "semantic": aggregate("semantic"),
+        "content": aggregate("content"),
     }
 
     if args.json:
@@ -178,13 +225,20 @@ def main() -> int:
             for d in r["differences"]:
                 print(f"       - {d}")
 
-    lit, sem = summary["literal"], summary["semantic"]
+    lit, sem, con = summary["literal"], summary["semantic"], summary["content"]
     print()
     print(f"utterances       : {summary['utterances']}")
     print(f"reference words  : {lit['ref_words']}")
-    print(f"literal  WER     : {lit['wer']:.2%}  ({lit['errors']} errors)")
-    print(f"semantic WER     : {sem['wer']:.2%}  ({sem['errors']} errors)  "
-          f"[spelled numbers mapped to digits]")
+    print(f"literal  WER     : {lit['wer']:.2%}  ({lit['errors']} errors)   "
+          f"surface comparison")
+    print(f"semantic WER     : {sem['wer']:.2%}  ({sem['errors']} errors)   "
+          f"+ spelled numbers as digits")
+    print(f"content  WER     : {con['wer']:.2%}  ({con['errors']} errors)   "
+          f"+ hyphenation ignored")
+    print()
+    print("content WER is the closest proxy for clinically meaningful error.")
+    print("It is NOT a safety measure: a single wrong organism or dose counts")
+    print("the same as a stray article. Read the per-utterance diffs.")
     return 0
 
 

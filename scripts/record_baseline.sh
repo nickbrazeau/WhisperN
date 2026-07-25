@@ -57,8 +57,16 @@ cat <<'BANNER'
 
 BANNER
 
-# ffmpeg must not consume the stdin we are reading prompts from.
-FFMPEG_COMMON=(-nostdin -loglevel error -f avfoundation -ar 16000 -ac 1 -c:a pcm_s16le)
+# Argument order matters. -nostdin and -loglevel are global; -f avfoundation
+# selects the input format and must precede -i. The rate/channel/codec flags
+# are OUTPUT options and must come AFTER -i -- placed before it they are read
+# as input options, and avfoundation has no sample_rate option, which fails
+# with "Option sample_rate not found".
+#
+# -nostdin is essential: without it ffmpeg consumes the stdin this script is
+# reading its prompts from.
+FF_GLOBAL=(-nostdin -loglevel error -f avfoundation)
+FF_OUTPUT=(-ar 16000 -ac 1 -c:a pcm_s16le)
 
 recorded=0
 skipped=0
@@ -84,15 +92,21 @@ while IFS= read -r line || [ -n "$line" ]; do
         fi
 
         # -y overwrites a previous take of the same phrase.
-        ffmpeg "${FFMPEG_COMMON[@]}" -y -i ":${DEVICE}" "$wav" &
+        errlog="$OUTDIR/.ffmpeg.err"
+        ffmpeg "${FF_GLOBAL[@]}" -i ":${DEVICE}" "${FF_OUTPUT[@]}" -y "$wav" \
+            2>"$errlog" &
         ff_pid=$!
 
         # Give ffmpeg a moment to open the device before the user speaks.
         sleep 0.4
         if ! kill -0 "$ff_pid" 2>/dev/null; then
             echo
-            echo "error: ffmpeg exited immediately. Two usual causes:" >&2
-            echo "  - wrong device index" >&2
+            echo "error: ffmpeg exited immediately. Its output was:" >&2
+            echo >&2
+            sed 's/^/    /' "$errlog" >&2
+            echo >&2
+            echo "Common causes:" >&2
+            echo "  - wrong device index (re-run without the index to list devices)" >&2
             echo "  - microphone permission not granted to this terminal" >&2
             echo "    (System Settings > Privacy & Security > Microphone)" >&2
             exit 3
@@ -124,6 +138,8 @@ while IFS= read -r line || [ -n "$line" ]; do
         esac
     done
 done < "$PHRASES"
+
+rm -f "$OUTDIR/.ffmpeg.err"
 
 echo
 echo "--------------------------------------------------------------------"
