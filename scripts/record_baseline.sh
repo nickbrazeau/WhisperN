@@ -190,12 +190,26 @@ command -v ffprobe >/dev/null || die "ffprobe not found"
 # from stdin. Reading prompts from stdin while the phrase file was redirected
 # into the loop is what previously made this script consume phrases as
 # keystrokes instead of waiting for the user.
-if ! exec 3< /dev/tty 2>/dev/null; then
-    echo "error: no controlling terminal." >&2
-    echo "This script is interactive -- run it directly in a Terminal window." >&2
+# Probe the terminal in a SUBSHELL before opening it for real.
+#
+# `exec 3< /dev/tty` cannot be guarded with `if ! ...; then`. A failed
+# redirection on `exec` is fatal in a non-interactive shell: bash exits
+# immediately with status 2, never taking the else branch and never running
+# the EXIT trap. Combined with 2>/dev/null that produced a completely silent
+# abort -- no message, no trap, nothing.
+#
+# Doing it inside ( ) confines that fatal exit to the subshell, so the failure
+# becomes an ordinary false condition we can report.
+if ! ( exec 3< /dev/tty ) 2>/dev/null; then
+    echo "error: cannot open /dev/tty (no controlling terminal)." >&2
+    echo "This script is interactive -- run it directly in a Terminal window," >&2
+    echo "not via a pipe, nohup, or a non-interactive runner." >&2
     _expected_exit=1
     exit 2
 fi
+# Safe now: the probe above proved this open succeeds. No 2>/dev/null here --
+# if it somehow fails, bash's own diagnostic must be visible.
+exec 3< /dev/tty
 
 if ! DEVICE="$(resolve_device "$DEVICE_WANT")"; then _expected_exit=1; exit 2; fi
 DEVICE_NAME="$(device_name_for "$DEVICE")"
