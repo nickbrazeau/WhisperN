@@ -22,6 +22,19 @@ DEVICE="${3:-}"
 command -v ffmpeg >/dev/null || { echo "error: ffmpeg not found" >&2; exit 1; }
 [ -f "$PHRASES" ] || { echo "error: no such file: $PHRASES" >&2; exit 2; }
 
+# Open the controlling terminal on fd 3 and read every prompt from it, never
+# from stdin. This is what keeps the interactive prompts independent of any
+# redirect: reading prompts from stdin while the phrase file was piped in is
+# exactly the bug that made this script blow through phrases without waiting.
+#
+# Opening it here also fails fast. Testing `[ -r /dev/tty ]` is not enough --
+# the device node can exist but not be readable under a non-interactive runner.
+if ! exec 3< /dev/tty 2>/dev/null; then
+    echo "error: no controlling terminal." >&2
+    echo "This script is interactive -- run it directly in a Terminal window." >&2
+    exit 2
+fi
+
 if [ -z "$DEVICE" ]; then
     echo "Available audio input devices:"
     echo
@@ -33,7 +46,7 @@ if [ -z "$DEVICE" ]; then
     echo "Bluetooth input is band-limited and measurably degrades medical terms."
     echo
     printf 'Device index: '
-    read -r DEVICE
+    read -r DEVICE <&3
 fi
 
 mkdir -p "$OUTDIR"
@@ -68,12 +81,29 @@ BANNER
 FF_GLOBAL=(-nostdin -loglevel error -f avfoundation)
 FF_OUTPUT=(-ar 16000 -ac 1 -c:a pcm_s16le)
 
+# Load every phrase into memory BEFORE the interactive loop.
+#
+# Do not stream the phrase file into the loop with `done < "$PHRASES"`. That
+# redirects stdin for the whole loop body, so the interactive `read` calls
+# consume phrase lines instead of keystrokes: the script never waits for the
+# user and silently eats several phrases per iteration.
+#
+# bash 3.2 (what macOS ships) has no mapfile/readarray, hence the read loop.
+phrases=()
+while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|\#*) continue ;; esac
+    phrases+=("$line")
+done < "$PHRASES"
+
+[ ${#phrases[@]} -gt 0 ] || { echo "error: no phrases in $PHRASES" >&2; exit 2; }
+
+echo "  ${#phrases[@]} phrases to record."
+
 recorded=0
 skipped=0
 i=0
 
-while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in ''|\#*) continue ;; esac
+for line in "${phrases[@]}"; do
     i=$((i + 1))
     id=$(printf "%03d" "$i")
     wav="$OUTDIR/phrase_${id}.wav"
@@ -85,7 +115,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         echo "    $line"
         echo
         printf 'Enter to start recording (or "s" to skip): '
-        read -r key
+        read -r key <&3
         if [ "$key" = "s" ]; then
             skipped=$((skipped + 1))
             break
@@ -113,7 +143,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         fi
 
         echo "  RECORDING... press Enter to stop."
-        read -r _
+        read -r _ <&3
 
         # SIGINT lets ffmpeg finalise the WAV header cleanly; SIGKILL would not.
         kill -INT "$ff_pid" 2>/dev/null
@@ -125,11 +155,19 @@ while IFS= read -r line || [ -n "$line" ]; do
         fi
 
         dur=$(ffprobe -v error -show_entries format=duration \
-                      -of default=nw=1:nk=1 "$wav" 2>/dev/null || echo "?")
+                      -of default=nw=1:nk=1 "$wav" 2>/dev/null || echo "0")
         echo "  captured ${dur}s -> $(basename "$wav")"
 
+        # A take far shorter than the phrase means something swallowed the
+        # prompt rather than that the user spoke quickly. Say so rather than
+        # letting an unusable file be kept.
+        if awk "BEGIN{exit !($dur < 1.0)}" 2>/dev/null; then
+            echo "  WARNING: only ${dur}s captured -- too short to contain this phrase."
+            echo "           Retry, and check the prompt waited for your keypress."
+        fi
+
         printf '  [k]eep / [r]etry / [s]kip: '
-        read -r choice
+        read -r choice <&3
         case "$choice" in
             r|R) continue ;;
             s|S) rm -f "$wav"; skipped=$((skipped + 1)); break ;;
@@ -137,7 +175,7 @@ while IFS= read -r line || [ -n "$line" ]; do
                  recorded=$((recorded + 1)); break ;;
         esac
     done
-done < "$PHRASES"
+done
 
 rm -f "$OUTDIR/.ffmpeg.err"
 
