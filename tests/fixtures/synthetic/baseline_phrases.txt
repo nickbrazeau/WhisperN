@@ -1,0 +1,9 @@
+# Baseline synthetic dictation phrases (CLAUDE.md §6 Phase 1)
+# One phrase per line. Blank lines and lines starting with '#' are ignored.
+# These are synthetic constructed phrases. They contain no patient information.
+
+The patient reports three days of dysuria and left flank pain.
+Blood cultures grew methicillin-susceptible Staphylococcus aureus.
+The differential includes pyelonephritis, nephrolithiasis, and musculoskeletal pain.
+Continue cefazolin two grams intravenously every eight hours.
+There is no evidence of endocarditis on transthoracic echocardiography.
