@@ -1,0 +1,33 @@
+# Runtime working directories — may contain audio, transcripts, or audit output
+runtime/
+
+# Audio
+*.wav
+*.m4a
+*.mp3
+*.aiff
+*.flac
+
+# Transcripts and intermediate text
+*.transcript.txt
+*.raw.txt
+*.polished.txt
+
+# Secrets
+.env
+.env.*
+
+# Locally identifying vocabulary (names, institutions)
+dictionaries/institutions_and_people.local.txt
+
+# Models and build artifacts (large, and redistribution is license-constrained)
+models/
+whisper.cpp/
+build/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+.DS_Store
