@@ -1,0 +1,61 @@
+# Synthetic dictation corpus.
+#
+# All phrases are constructed. They describe no real person and contain no
+# patient information. Do not add real dictation to this file -- it is tracked
+# in git.
+#
+# Phrases 001-005 are identical to baseline_phrases.txt so the real-voice
+# baseline stays directly comparable to the synthetic one already measured.
+#
+# Categories follow CLAUDE.md section 6, Phase 6.
+
+# --- 001-005: original baseline set (do not reorder) ---
+The patient reports three days of dysuria and left flank pain.
+Blood cultures grew methicillin-susceptible Staphylococcus aureus.
+The differential includes pyelonephritis, nephrolithiasis, and musculoskeletal pain.
+Continue cefazolin two grams intravenously every eight hours.
+There is no evidence of endocarditis on transthoracic echocardiography.
+
+# --- negation ---
+The patient does not report fever, chills, or night sweats.
+Repeat blood cultures remain negative at seventy-two hours.
+There is no radiographic evidence of osteomyelitis.
+
+# --- uncertainty and attribution ---
+This may represent contaminant bacteremia rather than true infection.
+Osteomyelitis remains possible but unconfirmed on current imaging.
+The patient reports that the outside records indicate a penicillin allergy.
+
+# --- medication, dose, route, frequency ---
+Reduce vancomycin to one gram intravenously every twelve hours.
+Start piperacillin-tazobactam four point five grams every six hours.
+Continue trimethoprim-sulfamethoxazole one double-strength tablet twice daily.
+Transition to oral linezolid six hundred milligrams every twelve hours.
+
+# --- organisms ---
+The isolate was identified as Enterococcus faecium, vancomycin-resistant.
+Cultures grew Pseudomonas aeruginosa susceptible to cefepime.
+Stool testing was positive for Clostridioides difficile toxin.
+Bronchoalveolar lavage demonstrated Pneumocystis jirovecii.
+
+# --- numbers, units, laboratory values ---
+The creatinine increased from zero point nine to one point four milligrams per deciliter.
+The temperature was thirty-eight point two degrees Celsius.
+The white blood cell count fell from eighteen thousand to nine thousand.
+C-reactive protein declined from two hundred ten to forty-five.
+
+# --- laterality and anatomy ---
+There is erythema of the left lower extremity extending to the mid calf.
+The right knee is more swollen than the left.
+Imaging showed a fluid collection anterior to the right psoas muscle.
+
+# --- ambiguous abbreviations (must NOT be expanded) ---
+The patient will follow up with PT next week.
+The outside note lists MS in the past medical history.
+The consult question concerns PCP prophylaxis.
+
+# --- research and statistical terminology ---
+We fit a Bayesian hierarchical model with a beta-binomial likelihood.
+The analysis used whole-genome sequencing and pairwise genetic relatedness.
+The posterior predictive check showed adequate calibration across strata.
+Isolates within five single nucleotide polymorphisms were considered linked.
