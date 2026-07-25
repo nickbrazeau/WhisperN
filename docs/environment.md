@@ -69,24 +69,34 @@ The Bluetooth headset is currently the **default input device**.
 | python3 | Installed | 3.13.12 (Homebrew miniconda base env) |
 | node | Installed | v24.8.0 |
 | ollama | Installed | 0.31.1 |
-| **cmake** | **Not installed** | required to build whisper.cpp |
-| **whisper-cli** | **Not installed** | not built yet |
-| **ffmpeg** | **Installed but broken** | see below |
-| sox | Not installed | optional |
+| cmake | Installed (this phase) | 4.4.0 |
+| whisper-cli | Built (this phase) | `whisper.cpp/build/bin/whisper-cli`, ggml 0.16.0 |
+| ffmpeg | **Repaired** (this phase) | 8.1.2_1 — see below |
+| sox | Not installed | not needed |
 
-### ffmpeg is currently non-functional
+### ffmpeg was non-functional; now repaired
 
-`ffmpeg -version` fails at dynamic-link time:
+As first inspected, `ffmpeg -version` failed at dynamic-link time:
 
 ```
 dyld: Library not loaded: /opt/homebrew/opt/x265/lib/libx265.215.dylib
   Referenced from: /opt/homebrew/Cellar/ffmpeg/8.0.1_3/bin/ffmpeg
 ```
 
-The installed ffmpeg 8.0.1_3 links against `libx265.215`, but the installed
-x265 is 4.2, which does not provide that library version. This is a broken
-Homebrew dependency, not a missing package. ffmpeg is needed for the
-`-ar 16000 -ac 1 -c:a pcm_s16le` conversion step in CLAUDE.md §6 Phase 1.
+ffmpeg 8.0.1_3 linked `libx265.215`, but the installed x265 4.2 ships
+`libx265.216`. A broken Homebrew dependency, not a missing package.
+
+`brew reinstall x265` (a long from-source build) pulled ffmpeg up to **8.1.2_1**,
+which links `libx265.216` correctly. Verified functionally: an
+`-ar 16000 -ac 1 -c:a pcm_s16le` conversion succeeds and the result transcribes
+correctly.
+
+**However, the pipeline does not depend on ffmpeg.** macOS ships `afconvert`,
+which performs the same 16 kHz mono conversion, and whisper.cpp bundles
+`miniaudio` for decoding. `scripts/transcribe_local.sh` uses `afconvert`
+deliberately, so the pipeline has one fewer external dependency and cannot be
+broken again by a Homebrew version skew. The repaired ffmpeg is a convenience
+for other work, not a requirement here.
 
 ### Python environment note
 
@@ -154,9 +164,12 @@ These require user input or a GUI check and are deliberately left open:
 ## 7. Baseline conclusions
 
 1. The machine is capable of running the intended fully-local stack.
-2. Three blockers exist before Phase 1 can begin: `cmake` is missing, `ffmpeg`
-   is broken, and `whisper.cpp` is not built.
+2. The three blockers found at inspection — missing `cmake`, broken `ffmpeg`,
+   unbuilt `whisper.cpp` — have all been cleared. Phase 1 completed; see
+   `docs/baseline-errors.md`.
 3. The local model runtime already satisfies the loopback-only constraint.
 4. No cloud credentials were found in the shell environment.
 5. The two audio input devices differ enough in bandwidth that benchmarks must
    record which one was used.
+6. The transcription path depends only on macOS-supplied tools (`afconvert`,
+   `say`) plus the locally built `whisper-cli`. No Homebrew media dependency.
