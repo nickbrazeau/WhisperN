@@ -195,22 +195,138 @@ reproduce this baseline. `runtime/` is excluded from git.
 
 ---
 
+## 7a. Real-voice baseline (33 phrases)
+
+Measured 2026-07-25. Recorded by the user reading
+`tests/fixtures/synthetic/dictation_corpus.txt` aloud at natural dictation
+pace, via `scripts/record_baseline.sh`, on the **built-in MacBook Pro
+microphone** (not the Bluetooth headset). Same model, same settings, no
+dictionary or prompt assistance.
+
+Utterance durations 2.2–6.4 s. Median transcription latency 2.36 s, p95 3.42 s.
+
+### Headline
+
+| Axis | Synthetic (TTS) | **Real voice** |
+|---|---|---|
+| Literal WER | 15.54 % | **21.62 %** |
+| Semantic WER | 12.50 % | **19.26 %** |
+| Content WER | 10.42 % | **15.31 %** |
+| Exact utterances | 20 / 33 | **12 / 33** |
+
+Real speech is roughly **47 % worse** on content WER than synthesised speech on
+identical text. This confirms the caveat in §2: the synthetic harness is a
+regression detector, not an accuracy estimate. Had dictionaries been tuned
+against the synthetic distribution, they would have been tuned against the
+wrong errors.
+
+The five-phrase figure of 2.38 % reported in §3 is superseded and should not be
+quoted. It was a small-sample artefact.
+
+### Errors that change clinical meaning
+
+These are the findings that matter. They are not spelling slips; in each case
+Whisper produced **fluent, well-formed, wrong text**.
+
+| # | Spoken | Transcribed | Why it matters |
+|---|---|---|---|
+| 015 | `oral linezolid six hundred milligrams` | `oral and nasal at 600 milligrams` | **The drug name vanished and a route was invented.** A dose survives, attached to no medication and to a route never spoken. |
+| 017 | `Pseudomonas aeruginosa … cefepime` | `Pseudomonas originosa … septipine` | Organism *and* antibiotic both wrong. `septipine` is not a drug. |
+| 002 | `methicillin-susceptible Staphylococcus aureus` | `methicillin susceptible **to** staphylococcus aureus` | An inserted `to` turns a susceptibility phenotype into a different claim. |
+| 013 | `piperacillin-tazobactam` | `Pipercellum Tauzan Bactam` | Drug name split into three invented words. |
+| 019 | `Pneumocystis jirovecii` | `pneumocystis, Jervichet` | Organism name destroyed. |
+| 029 | `PCP prophylaxis` | `PCAP prophylaxis` | One abbreviation silently became a different one. |
+| 028 | `in the past medical history` | `in the past **Michael Hex 3**` | **Invented proper-noun-like content** in a clinical sentence. |
+| 016 | `vancomycin-resistant` | `vancomycin resistance` | Adjective to noun; alters the assertion. |
+| 005 | `echocardiography` | `echocardiogram` | Modality wording changed (clinically minor). |
+
+Note the contrast with the synthetic run, where `jirovecii` became `cerevisiae`
+— a real, different organism. Both runs corrupt organism names; the *shape* of
+the corruption differs, which is another reason not to tune on synthetic audio
+alone.
+
+### The pattern
+
+Failures cluster tightly on **multi-syllable antibiotic names, organism names,
+and abbreviations**:
+
+- Antibiotics: `linezolid`, `cefepime`, `piperacillin-tazobactam`,
+  `trimethoprim-sulfamethoxazole`
+- Organisms: `aeruginosa`, `jirovecii`, `faecium`
+- Abbreviations: `PCP` → `PCAP`
+
+This is precisely the target of Phase 2, and it is now evidenced on real audio
+rather than assumed.
+
+### What held up
+
+- **Negation**: `does not report`, `no radiographic evidence`, `remain negative`
+  — all preserved (006, 007, 008).
+- **Uncertainty**: `may represent`, `remains possible but unconfirmed` — exact
+  (009, 010).
+- **Attribution**: `the patient reports that the outside records indicate` —
+  exact (011).
+- **Laterality**: `left lower extremity`, `right knee … than the left`,
+  `right psoas` — all exact (024, 025, 026).
+- **Numbers and units**: every value preserved (020–023); only spoken-to-digit
+  formatting changed.
+- **Ambiguous abbreviation `PT`** was left alone and not expanded (027).
+
+So the protected categories that CLAUDE.md §4.1 cares most about survived raw
+transcription intact. The damage is concentrated in **named entities**.
+
+### Consequence for later phases
+
+1. **Phase 2** has a clear, evidence-backed target list.
+2. **Phase 4 cannot rely on spelling.** `septipine` and `and nasal` are
+   fluent English. A validator that only checks whether a token is a known word
+   would pass both. Medication and organism names must be checked against a
+   closed vocabulary, and an out-of-vocabulary drug name must force review.
+3. **Fabrication is real** (`Michael Hex 3`), and it originates in the **ASR**,
+   not the polishing model. The validator compares polished text against the raw
+   transcript, so ASR-invented content is inside the trusted baseline and will
+   pass validation unchallenged. This is a structural gap worth stating plainly.
+
+### Silence hallucination
+
+Separately observed while testing the recorder: given a recording of an empty
+room, `large-v3-turbo` transcribed `Thank you.` — a well-documented Whisper
+behaviour on non-speech input.
+
+A dictation tool that emits invented text when the user has said nothing is a
+hazard, and Phase 4 cannot catch it for the reason above. A voice-activity gate
+before transcription is the appropriate mitigation. `whisper-vad-speech-segments`
+was built alongside `whisper-cli` and is available. Logged here as a Phase 5
+requirement.
+
+---
+
 ## 8. Conclusions
 
-1. Unassisted `large-v3-turbo` is already strong on this material: 2.38 %
-   semantic WER, with 3 of 5 utterances exact.
-2. There is **one** genuine medical-term error to fix (`pyelonephritis`), and it
-   is a well-conditioned target.
-3. The number-word/digit difference is a formatting artefact, not an error, but
+1. The authoritative baseline is the real-voice run in §7a: **15.31 % content
+   WER**, 12 of 33 utterances exact. The earlier 5-phrase synthetic figure
+   (2.38 %) is superseded and misleading.
+2. Errors concentrate on **named entities** — antibiotics, organisms,
+   abbreviations — not on grammar, negation, numbers, or laterality.
+3. The most dangerous failures are **fluent and wrong** (`septipine`,
+   `and nasal`, `Michael Hex 3`), so no spell-check-style validator will catch
+   them. Closed-vocabulary checking is required.
+4. The protected categories in CLAUDE.md §4.1 survived raw transcription intact
+   in every test case.
+5. The number-word/digit difference is a formatting artefact, not an error, but
    it dictates how the Phase 4 validator must compare protected numbers.
-4. Local transcription provably works with no network access.
-5. Latency is dominated by per-invocation model load, which is addressable later
-   without touching the model.
+6. Local transcription provably works with no network access.
+7. Latency on real utterances: median 2.36 s, p95 3.42 s. Roughly 1.1 s of each
+   is per-invocation model load, addressable later with a persistent process.
 
 ### Caveats on this baseline
 
-- Five utterances is far too small a sample to support a precise error rate. The
-  headline figures are indicative, not statistical.
-- Synthetic speech understates real-world difficulty (§2).
-- One voice, one microphone path, one speaking style.
-- No measurement yet on the user's actual voice or the Bluetooth input path.
+- 33 utterances and 296 reference words is enough to see a pattern, not enough
+  for a precise rate. Treat the percentages as indicative.
+- One voice, one microphone, one reading session, scripted rather than
+  spontaneous speech. Real dictation includes hesitation and self-correction,
+  which are not represented here.
+- The Bluetooth input path remains unmeasured and is expected to be worse.
+- The corpus was written to exercise known-hard categories, so it is adversarial
+  by construction. It over-represents difficult terminology relative to ordinary
+  dictation, and its WER should not be read as an expected everyday rate.
