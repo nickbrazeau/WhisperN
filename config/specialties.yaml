@@ -1,0 +1,49 @@
+# Specialty modes.
+#
+# Two distinct roles, deliberately separated:
+#
+#   prompt     -- curated, ordered files used to build the Whisper initial
+#                 prompt. The prompt budget is n_text_ctx/2 = 224 tokens for
+#                 large-v3-turbo, so only a small fraction of vocabulary can
+#                 ever appear here. Order is priority order.
+#
+#   validation -- large generated files naming the full permitted vocabulary.
+#                 Used by the Phase 4 validator to decide whether a drug or
+#                 organism name is real. NEVER loaded into the prompt: they
+#                 hold tens of thousands of terms.
+#
+# Confusing these is the main way to get this wrong. A 13,000-term drug list
+# in a 224-token prompt would be silently truncated to whatever happened to
+# sort first.
+
+general_internal_medicine:
+  prompt:
+    - general_medicine.txt
+    - procedures.txt
+  validation:
+    - medications.txt
+    - microorganisms.txt
+
+infectious_diseases:
+  prompt:
+    - infectious_diseases.txt
+    - general_medicine.txt
+    - procedures.txt
+  validation:
+    - medications.txt
+    - microorganisms.txt
+
+research:
+  prompt:
+    - research_terms.txt
+    - infectious_diseases.txt
+  validation:
+    - medications.txt
+    - microorganisms.txt
+
+email:
+  prompt:
+    - general_medicine.txt
+  validation:
+    - medications.txt
+    - microorganisms.txt

@@ -1,0 +1,101 @@
+# Research, statistical, and genomic-epidemiology vocabulary.
+#
+# Hand-curated and PROMPT-ELIGIBLE. Included because dictation in this domain
+# mixes statistical and molecular terms that a general model renders poorly,
+# and because CLAUDE.md section 3.3 defines a `research` mode that must
+# preserve statistical notation, gene names, organism names, and acronyms.
+#
+# Contains no patient information.
+
+# --- statistics and inference ---
+Bayesian hierarchical model
+beta-binomial likelihood
+posterior predictive check
+posterior distribution
+prior distribution
+credible interval
+confidence interval
+Markov chain Monte Carlo
+Hamiltonian Monte Carlo
+Gibbs sampling
+maximum likelihood estimation
+generalized linear model
+mixed-effects model
+random effects
+fixed effects
+logistic regression
+Poisson regression
+negative binomial
+Cox proportional hazards
+Kaplan-Meier
+hazard ratio
+odds ratio
+risk ratio
+incidence rate ratio
+attributable fraction
+sensitivity analysis
+propensity score
+inverse probability weighting
+instrumental variable
+directed acyclic graph
+confounding
+effect modification
+interaction term
+multiple imputation
+missing at random
+intention-to-treat
+per-protocol
+non-inferiority
+interrupted time series
+difference-in-differences
+regression discontinuity
+bootstrap resampling
+cross-validation
+receiver operating characteristic
+area under the curve
+calibration
+discrimination
+overdispersion
+heteroskedasticity
+autocorrelation
+false discovery rate
+Bonferroni correction
+
+# --- genomics and molecular epidemiology ---
+whole-genome sequencing
+single nucleotide polymorphism
+pairwise genetic relatedness
+phylogenetic tree
+maximum likelihood phylogeny
+molecular clock
+multilocus sequence typing
+core genome
+pangenome
+plasmid
+mobile genetic element
+horizontal gene transfer
+antimicrobial resistance gene
+resistome
+metagenomics
+16S ribosomal RNA sequencing
+shotgun sequencing
+amplicon sequencing
+read depth
+coverage depth
+variant calling
+reference genome
+assembly
+contig
+transmission cluster
+serial interval
+basic reproduction number
+effective reproduction number
+force of infection
+compartmental model
+susceptible-infected-recovered
+agent-based model
+seroprevalence
+incidence
+prevalence
+case fatality ratio
+infection fatality ratio

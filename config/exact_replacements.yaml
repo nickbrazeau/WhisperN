@@ -1,0 +1,82 @@
+# Exact replacements applied to raw transcripts.
+#
+# STATUS: NONE ARE ACTIVE. Every entry below is `enabled: false` and awaits
+# human review (CLAUDE.md sections 2.4 and 8).
+#
+# An exact replacement is higher risk than a dictionary term, because it
+# rewrites clinical text deterministically with no model in the loop. Each
+# entry must carry:
+#
+#   match     - the literal ASR output observed, lowercased
+#   replace   - the correct text
+#   evidence  - where the error was actually observed. Not "this could happen";
+#               a real, reproducible transcript.
+#   failing   - synthetic example that fails without the rule
+#   passing   - synthetic example that succeeds with it
+#   safety    - why this cannot create a dangerous false correction
+#   enabled   - false until a human approves it
+#
+# Rules must be narrow. Do NOT add broad phonetic rewrites: a rule that fires
+# on a substring can corrupt unrelated words, and the whole point of this file
+# is that it runs without judgement.
+#
+# Rules must never alter numbers, negation, dose, units, or laterality.
+# Candidates that would do so are rejected outright, not written here disabled.
+
+replacements:
+
+  - match: "clisteroides"
+    replace: "Clostridioides"
+    evidence: >
+      Real-voice baseline 2026-07-25, phrase_018, with the infectious_diseases
+      ASR prompt active: "Stool testing was positive for clisteroides,
+      difficile toxin". Also rendered "clisteriodiodes" under a second prompt
+      variant, so the misrecognition is not stable across prompts.
+    failing: "stool testing was positive for clisteroides difficile toxin"
+    passing: "Stool testing was positive for Clostridioides difficile toxin"
+    safety: >
+      "clisteroides" is not a word in English or in any nomenclature. It has no
+      meaning to collide with, and the replacement changes no number, negation,
+      dose, unit, or laterality. Risk is limited to a cosmetic change if the
+      speaker genuinely intended some other nonword.
+    caveat: >
+      Only the observed spelling is matched. "clisteriodiodes" is deliberately
+      NOT included -- covering both invites a fuzzy rule, and the correct fix
+      for an unstable misrecognition is a validator that flags an unknown
+      organism name, not an ever-growing list of misspellings.
+    enabled: false
+
+  - match: "septipine"
+    replace: "cefepime"
+    evidence: >
+      Real-voice baseline 2026-07-25, phrase_017, no prompt: "Cultures grew
+      Pseudomonas originosa, susceptible to septipine." With the prompt active
+      this became "cefipine" instead, so again the error is prompt-dependent.
+    failing: "cultures grew pseudomonas aeruginosa susceptible to septipine"
+    passing: "Cultures grew Pseudomonas aeruginosa susceptible to cefepime"
+    safety: >
+      "septipine" is not a drug, not a word, and not a substring of any drug in
+      dictionaries/medications.txt. It cannot be confused with septra,
+      sepsis, or any real agent by exact match.
+    caveat: >
+      DANGEROUS CLASS. This rule asserts which antibiotic the speaker said.
+      If the true utterance were some other cephalosporin misheard the same
+      way, this would silently substitute the wrong drug. Recommend rejecting
+      this rule permanently and requiring review for unknown drug names
+      instead -- an unrecognised antibiotic should stop the pipeline, not be
+      guessed at.
+    enabled: false
+
+  - match: "staff aureus"
+    replace: "Staphylococcus aureus"
+    evidence: >
+      Not observed in this project's baselines. Carried from the CLAUDE.md
+      section 2.4 example. Included to record that it has NOT been validated
+      here.
+    failing: "blood cultures grew staff aureus"
+    passing: "Blood cultures grew Staphylococcus aureus"
+    safety: >
+      "staff aureus" as an exact two-word sequence has no plausible
+      non-medical reading. Note "staff" alone is a common English word and
+      must never be rewritten on its own.
+    enabled: false

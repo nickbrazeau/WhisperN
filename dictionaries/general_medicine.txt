@@ -1,0 +1,168 @@
+# General internal medicine vocabulary.
+#
+# Hand-curated and PROMPT-ELIGIBLE. Terms chosen because they are common in
+# dictation AND plausibly misrecognised; ordinary English words that Whisper
+# already handles are deliberately omitted -- every token here costs prompt
+# budget that a harder term could use.
+#
+# Contains no patient information.
+
+# --- presenting problems ---
+dysuria
+hematuria
+hemoptysis
+hematemesis
+melena
+hematochezia
+dyspnea
+orthopnea
+paroxysmal nocturnal dyspnea
+odynophagia
+dysphagia
+diaphoresis
+syncope
+presyncope
+paresthesia
+claudication
+pruritus
+jaundice
+ascites
+edema
+lymphadenopathy
+hepatosplenomegaly
+
+# --- cardiovascular ---
+atrial fibrillation
+congestive heart failure
+myocardial infarction
+non-ST-elevation myocardial infarction
+ST-elevation myocardial infarction
+coronary artery disease
+peripheral arterial disease
+deep vein thrombosis
+pulmonary embolism
+hypertension
+hyperlipidemia
+aortic stenosis
+mitral regurgitation
+transthoracic echocardiography
+transesophageal echocardiography
+ejection fraction
+
+# --- pulmonary ---
+chronic obstructive pulmonary disease
+obstructive sleep apnea
+interstitial lung disease
+pleural effusion
+pneumothorax
+bronchiectasis
+acute respiratory distress syndrome
+
+# --- renal, endocrine, metabolic ---
+acute kidney injury
+chronic kidney disease
+end-stage renal disease
+nephrolithiasis
+glomerulonephritis
+nephrotic syndrome
+diabetes mellitus
+diabetic ketoacidosis
+hyperkalemia
+hypokalemia
+hyponatremia
+hypernatremia
+hypercalcemia
+hypomagnesemia
+metabolic acidosis
+anion gap
+hypothyroidism
+hyperthyroidism
+adrenal insufficiency
+
+# --- gastrointestinal and hepatic ---
+gastroesophageal reflux disease
+peptic ulcer disease
+inflammatory bowel disease
+Crohn disease
+ulcerative colitis
+cirrhosis
+hepatic encephalopathy
+pancreatitis
+cholecystitis
+choledocholithiasis
+
+# --- heme, rheum, neuro ---
+anemia
+thrombocytopenia
+neutropenia
+pancytopenia
+leukocytosis
+coagulopathy
+rheumatoid arthritis
+systemic lupus erythematosus
+giant cell arteritis
+polymyalgia rheumatica
+gout
+pseudogout
+cerebrovascular accident
+transient ischemic attack
+seizure disorder
+peripheral neuropathy
+multiple sclerosis
+
+# --- laboratory and studies ---
+complete blood count
+basic metabolic panel
+comprehensive metabolic panel
+creatinine
+blood urea nitrogen
+estimated glomerular filtration rate
+C-reactive protein
+erythrocyte sedimentation rate
+procalcitonin
+lactate
+troponin
+brain natriuretic peptide
+hemoglobin A1c
+international normalized ratio
+prothrombin time
+partial thromboplastin time
+arterial blood gas
+urinalysis
+blood cultures
+sputum culture
+computed tomography
+magnetic resonance imaging
+positron emission tomography
+electrocardiogram
+
+# --- common medications outside ID ---
+metoprolol
+carvedilol
+lisinopril
+losartan
+amlodipine
+hydrochlorothiazide
+furosemide
+spironolactone
+atorvastatin
+rosuvastatin
+apixaban
+rivaroxaban
+warfarin
+clopidogrel
+metformin
+insulin glargine
+empagliflozin
+semaglutide
+levothyroxine
+prednisone
+methylprednisolone
+pantoprazole
+omeprazole
+gabapentin
+ondansetron
+acetaminophen
+ibuprofen
+oxycodone
+hydromorphone

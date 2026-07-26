@@ -1,0 +1,219 @@
+# Infectious diseases: syndromes, organisms, and antimicrobials.
+#
+# Hand-curated and PROMPT-ELIGIBLE. Order matters: entries near the top are
+# preferred when the ASR prompt budget (224 tokens) is tight, so the terms
+# observed to fail in docs/baseline-errors.md come first.
+#
+# This is not a complete formulary or a complete list of pathogens. The large
+# generated dictionaries (medications.txt, microorganisms.txt) are the
+# vocabulary for validation; this file is the vocabulary for biasing the ASR.
+#
+# Contains no patient information.
+
+# === PROMPT PRIORITY BLOCK ===
+#
+# Only ~16 terms fit the 224-token budget, so this block is what actually
+# reaches the decoder. Everything below it is for completeness and for
+# validation, and will almost never be selected.
+#
+# Membership is earned by evidence, not by taxonomy. Two ways in:
+#   1. the term was observed to fail in docs/baseline-errors.md, or
+#   2. the term is common in this practice AND demonstrably fragile.
+#
+# Adding a term here evicts another. Measured 2026-07-26: filling these slots
+# with a Staphylococcus/Streptococcus walk crowded out Clostridioides
+# difficile, which then regressed from correct to "clisteroides". Prompt
+# inclusion is zero-sum -- spend it on terms that fail.
+
+# --- observed ASR failures, real-voice baseline 2026-07-25 ---
+linezolid
+cefepime
+piperacillin-tazobactam
+trimethoprim-sulfamethoxazole
+Pseudomonas aeruginosa
+Pneumocystis jirovecii
+Enterococcus faecium
+methicillin-susceptible Staphylococcus aureus
+methicillin-resistant Staphylococcus aureus
+
+# --- common and fragile: regressed when absent from the prompt ---
+Clostridioides difficile
+Staphylococcus aureus
+Streptococcus pneumoniae
+Escherichia coli
+Klebsiella pneumoniae
+
+# === END PROMPT PRIORITY BLOCK ===
+
+# --- organisms ---
+Staphylococcus epidermidis
+Staphylococcus lugdunensis
+Streptococcus pyogenes
+Streptococcus agalactiae
+Streptococcus mitis
+Enterococcus faecalis
+Escherichia coli
+Klebsiella pneumoniae
+Klebsiella oxytoca
+Enterobacter cloacae
+Serratia marcescens
+Proteus mirabilis
+Citrobacter freundii
+Acinetobacter baumannii
+Stenotrophomonas maltophilia
+Burkholderia cepacia
+Haemophilus influenzae
+Neisseria meningitidis
+Neisseria gonorrhoeae
+Moraxella catarrhalis
+Bacteroides fragilis
+Clostridioides difficile
+Clostridium perfringens
+Listeria monocytogenes
+Legionella pneumophila
+Mycoplasma pneumoniae
+Chlamydia trachomatis
+Mycobacterium tuberculosis
+Mycobacterium avium complex
+nontuberculous mycobacteria
+Nocardia farcinica
+Actinomyces israelii
+Cutibacterium acnes
+Candida albicans
+Candida glabrata
+Candida auris
+Cryptococcus neoformans
+Aspergillus fumigatus
+Histoplasma capsulatum
+Coccidioides immitis
+Blastomyces dermatitidis
+Rhizopus oryzae
+Toxoplasma gondii
+Plasmodium falciparum
+Strongyloides stercoralis
+
+# --- resistance phenotypes ---
+vancomycin-resistant Enterococcus
+extended-spectrum beta-lactamase
+carbapenem-resistant Enterobacterales
+carbapenemase-producing organism
+multidrug-resistant organism
+AmpC beta-lactamase
+inducible clindamycin resistance
+
+# --- antimicrobials ---
+vancomycin
+daptomycin
+ceftriaxone
+ceftazidime
+ceftazidime-avibactam
+ceftolozane-tazobactam
+cefazolin
+cefuroxime
+cefoxitin
+meropenem
+ertapenem
+imipenem-cilastatin
+ampicillin-sulbactam
+amoxicillin-clavulanate
+nafcillin
+oxacillin
+penicillin G
+metronidazole
+clindamycin
+azithromycin
+doxycycline
+minocycline
+levofloxacin
+ciprofloxacin
+moxifloxacin
+gentamicin
+tobramycin
+amikacin
+rifampin
+isoniazid
+pyrazinamide
+ethambutol
+fluconazole
+voriconazole
+posaconazole
+isavuconazole
+micafungin
+caspofungin
+amphotericin B
+liposomal amphotericin
+flucytosine
+acyclovir
+valacyclovir
+ganciclovir
+valganciclovir
+oseltamivir
+remdesivir
+nirmatrelvir-ritonavir
+tedizolid
+ceftaroline
+dalbavancin
+oritavancin
+omadacycline
+eravacycline
+fosfomycin
+nitrofurantoin
+
+# --- antiretrovirals ---
+antiretroviral therapy
+dolutegravir
+bictegravir
+raltegravir
+darunavir
+tenofovir alafenamide
+tenofovir disoproxil fumarate
+emtricitabine
+lamivudine
+abacavir
+efavirenz
+rilpivirine
+doravirine
+cabotegravir
+lenacapavir
+
+# --- syndromes and conditions ---
+infective endocarditis
+prosthetic joint infection
+prosthetic valve endocarditis
+central line-associated bloodstream infection
+catheter-related bloodstream infection
+ventilator-associated pneumonia
+community-acquired pneumonia
+hospital-acquired pneumonia
+osteomyelitis
+septic arthritis
+vertebral osteomyelitis
+epidural abscess
+necrotizing fasciitis
+cellulitis
+pyelonephritis
+complicated urinary tract infection
+intra-abdominal infection
+diverticulitis
+cholangitis
+bacteremia
+candidemia
+fungemia
+sepsis
+septic shock
+febrile neutropenia
+opportunistic infection
+Pneumocystis pneumonia
+cryptococcal meningitis
+disseminated histoplasmosis
+latent tuberculosis infection
+active tuberculosis
+human immunodeficiency virus
+acquired immunodeficiency syndrome
+immune reconstitution inflammatory syndrome
+Clostridioides difficile infection
+surgical site infection
+graft infection
+endophthalmitis
+mediastinitis
+empyema

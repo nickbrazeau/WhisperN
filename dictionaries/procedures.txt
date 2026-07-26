@@ -1,0 +1,41 @@
+# Procedures and specimen/source terminology.
+#
+# Hand-curated and PROMPT-ELIGIBLE.
+# Contains no patient information.
+
+bronchoalveolar lavage
+bronchoscopy
+endobronchial ultrasound
+thoracentesis
+paracentesis
+lumbar puncture
+arthrocentesis
+bone marrow biopsy
+transbronchial biopsy
+computed tomography-guided biopsy
+incision and drainage
+debridement
+irrigation and debridement
+hardware removal
+two-stage exchange arthroplasty
+explantation
+percutaneous drainage
+peripherally inserted central catheter
+tunneled dialysis catheter
+central venous catheter
+port-a-cath
+nephrostomy tube
+percutaneous endoscopic gastrostomy
+colonoscopy
+esophagogastroduodenoscopy
+endoscopic retrograde cholangiopancreatography
+cystoscopy
+coronary angiography
+cardiac catheterization
+transesophageal echocardiogram
+white blood cell scan
+tagged white blood cell scan
+fluorodeoxyglucose positron emission tomography
+gallium scan
+magnetic resonance angiography
+ventilation-perfusion scan

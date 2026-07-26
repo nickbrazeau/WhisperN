@@ -1,0 +1,139 @@
+# Medical abbreviations.
+#
+# Two sections with very different safety properties:
+#
+#   unambiguous -- exactly one clinically plausible expansion. These MAY be
+#                  expanded automatically.
+#   ambiguous   -- more than one plausible expansion. These MUST NOT be
+#                  expanded automatically, ever (CLAUDE.md sections 2.2, 3.2).
+#                  They are listed so the system can recognise them and, where
+#                  relevant, flag them for human review.
+#
+# Being listed under `ambiguous` is a positive instruction to leave the text
+# alone. Do not "resolve" one by picking the most common reading.
+#
+# Evidence note: in the real-voice baseline the ASR turned spoken "PCP" into
+# "PCAP". That is an ASR error, not an expansion error, but it shows why these
+# short forms need explicit handling -- see docs/baseline-errors.md.
+#
+# Contains no patient information.
+
+unambiguous:
+  MRSA: methicillin-resistant Staphylococcus aureus
+  MSSA: methicillin-susceptible Staphylococcus aureus
+  VRE: vancomycin-resistant Enterococcus
+  ESBL: extended-spectrum beta-lactamase
+  CRE: carbapenem-resistant Enterobacterales
+  CLABSI: central line-associated bloodstream infection
+  CAUTI: catheter-associated urinary tract infection
+  VAP: ventilator-associated pneumonia
+  SSTI: skin and soft tissue infection
+  PJI: prosthetic joint infection
+  IE: infective endocarditis
+  TTE: transthoracic echocardiography
+  TEE: transesophageal echocardiography
+  HIV: human immunodeficiency virus
+  AIDS: acquired immunodeficiency syndrome
+  ART: antiretroviral therapy
+  IRIS: immune reconstitution inflammatory syndrome
+  LTBI: latent tuberculosis infection
+  NTM: nontuberculous mycobacteria
+  MAC: Mycobacterium avium complex
+  BAL: bronchoalveolar lavage
+  CSF: cerebrospinal fluid
+  TMP-SMX: trimethoprim-sulfamethoxazole
+  PICC: peripherally inserted central catheter
+  COPD: chronic obstructive pulmonary disease
+  CHF: congestive heart failure
+  AKI: acute kidney injury
+  CKD: chronic kidney disease
+  ESRD: end-stage renal disease
+  DKA: diabetic ketoacidosis
+  DVT: deep vein thrombosis
+  GERD: gastroesophageal reflux disease
+  CBC: complete blood count
+  CMP: comprehensive metabolic panel
+  BMP: basic metabolic panel
+  CRP: C-reactive protein
+  ESR: erythrocyte sedimentation rate
+  BUN: blood urea nitrogen
+  eGFR: estimated glomerular filtration rate
+  INR: international normalized ratio
+  WBC: white blood cell count
+  WGS: whole-genome sequencing
+  SNP: single nucleotide polymorphism
+  MLST: multilocus sequence typing
+  MCMC: Markov chain Monte Carlo
+  AUC: area under the curve
+  ROC: receiver operating characteristic
+
+ambiguous:
+  PCP:
+    - Pneumocystis pneumonia
+    - primary care physician
+    - phencyclidine
+  MS:
+    - multiple sclerosis
+    - mitral stenosis
+    - morphine sulfate
+    - mental status
+  PT:
+    - physical therapy
+    - prothrombin time
+    - patient
+  CVA:
+    - cerebrovascular accident
+    - costovertebral angle
+  RA:
+    - rheumatoid arthritis
+    - right atrium
+    - room air
+  PE:
+    - pulmonary embolism
+    - physical examination
+    - pleural effusion
+  DM:
+    - diabetes mellitus
+    - dermatomyositis
+  CMV:
+    - cytomegalovirus
+    - controlled mechanical ventilation
+  MI:
+    - myocardial infarction
+    - mitral insufficiency
+  AS:
+    - aortic stenosis
+    - ankylosing spondylitis
+  IT:
+    - intrathecal
+    - information technology
+  BD:
+    - twice daily
+    - Behcet disease
+  ID:
+    - infectious diseases
+    - identification
+  TB:
+    - tuberculosis
+    - total bilirubin
+  HD:
+    - hemodialysis
+    - hospital day
+    - Huntington disease
+  LP:
+    - lumbar puncture
+    - lichen planus
+  CF:
+    - cystic fibrosis
+    - complement fixation
+  AF:
+    - atrial fibrillation
+    - afebrile
+  SBP:
+    - spontaneous bacterial peritonitis
+    - systolic blood pressure
+  ARDS:
+    - acute respiratory distress syndrome
+  OSA:
+    - obstructive sleep apnea
+    - overall survival analysis
