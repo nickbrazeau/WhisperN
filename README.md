@@ -19,7 +19,7 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 |---|---|---|
 | 0 | Inspect and document the machine | Complete — [`docs/environment.md`](docs/environment.md) |
 | 1 | Local raw transcription | Complete — [`docs/baseline-errors.md`](docs/baseline-errors.md) |
-| 2 | Medical terminology in ASR | Not started |
+| 2 | Medical terminology in ASR | Complete — content WER 15.31% → 12.70% |
 | 3 | Constrained medical polishing | Not started |
 | 4 | Protected-token validator | Not started |
 | 5 | Desktop integration | Not started |
@@ -76,6 +76,21 @@ Score transcripts against references:
 
 ```bash
 .venv/bin/python scripts/score_transcripts.py runtime/tmp/baseline
+```
+
+Build the ASR context prompt and transcribe with terminology bias:
+
+```bash
+.venv/bin/python scripts/build_asr_prompt.py --mode infectious_diseases \
+    --out runtime/tmp/asr_prompt.txt --stats
+scripts/transcribe_local.sh audio.wav --prompt-file runtime/tmp/asr_prompt.txt
+```
+
+Rebuild the generated dictionaries from downloaded sources (setup-time only,
+needs network):
+
+```bash
+scripts/build_dictionaries.py --ndc product.txt --taxonomy taxdump/ --out dictionaries/
 ```
 
 ---
