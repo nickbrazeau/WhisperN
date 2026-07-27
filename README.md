@@ -23,7 +23,7 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 3 | Constrained medical polishing | Built, **deferred** — [ADR 0001](docs/decisions/0001-defer-local-polishing-model.md) |
 | 4 | Protected-token validator | Complete — [40/40 tests, 100% precision](docs/phase4-results.md) |
 | 5 | Desktop integration | Partial — VAD gate, review interface; no paste path |
-| 6 | Synthetic medical test suite | Not started |
+| 6 | Synthetic medical test suite | Complete — [gate passed](docs/phase6-results.md); named-entity accuracy 62.5% |
 | 7 | Offline and privacy verification | Not started |
 | 8 | Deployment | Not started |
 
@@ -95,6 +95,12 @@ Validate polished text against a raw transcript (deterministic, no model):
 ```bash
 scripts/validate_changes.py --raw raw.txt --polished polished.txt
 # exit 0 = safe_to_paste, 1 = review_required, 2 = rejected
+```
+
+Run the Phase 6 acceptance benchmark:
+
+```bash
+scripts/benchmark.py runtime/tmp/corpus_prompted2 runtime/tmp/heldout_syn
 ```
 
 Evaluate a candidate polishing model against the adversarial cases:
