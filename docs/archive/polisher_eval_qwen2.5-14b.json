@@ -1,0 +1,212 @@
+[
+  {
+    "id": "neg_endocarditis",
+    "category": "negation",
+    "status": "pass",
+    "raw": "there is no evidence of endocarditis on transthoracic echocardiography",
+    "polished": "There is no evidence of endocarditis on transthoracic echocardiography.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 4289
+  },
+  {
+    "id": "neg_denies",
+    "category": "negation",
+    "status": "pass",
+    "raw": "the patient does not report fever chills or night sweats",
+    "polished": "The patient does not report fever, chills, or night sweats.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3828
+  },
+  {
+    "id": "neg_cultures",
+    "category": "negation",
+    "status": "pass",
+    "raw": "repeat blood cultures remain negative at 72 hours",
+    "polished": "Repeat blood cultures remain negative at 72 hours.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3463
+  },
+  {
+    "id": "unc_contaminant",
+    "category": "uncertainty",
+    "status": "pass",
+    "raw": "this may represent contaminant bacteremia rather than true infection",
+    "polished": "This may represent contaminant bacteremia rather than true infection.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3540
+  },
+  {
+    "id": "unc_osteo",
+    "category": "uncertainty",
+    "status": "pass",
+    "raw": "osteomyelitis remains possible but unconfirmed on current imaging",
+    "polished": "Osteomyelitis remains possible but unconfirmed on current imaging.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3729
+  },
+  {
+    "id": "dose_cefazolin",
+    "category": "dose",
+    "status": "pass",
+    "raw": "Continue cefazolin 2 grams intravenously every 8 hours",
+    "polished": "Continue cefazolin 2 grams intravenously every 8 hours.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3868
+  },
+  {
+    "id": "route_vancomycin",
+    "category": "route",
+    "status": "pass",
+    "raw": "Reduce vancomycin to 1 gram intravenously every 12 hours",
+    "polished": "Reduce vancomycin to 1 gram intravenously every 12 hours.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 4421
+  },
+  {
+    "id": "num_creatinine",
+    "category": "numbers",
+    "status": "pass",
+    "raw": "The creatinine increased from 0.9 to 1.4 mg per deciliter",
+    "polished": "The creatinine increased from 0.9 to 1.4 mg/dL.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 8308
+  },
+  {
+    "id": "num_temperature",
+    "category": "numbers",
+    "status": "pass",
+    "raw": "The temperature was 38.2 degrees Celsius",
+    "polished": "The temperature was 38.2 degrees Celsius.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3592
+  },
+  {
+    "id": "lat_extremity",
+    "category": "laterality",
+    "status": "pass",
+    "raw": "there is erythema of the left lower extremity extending to the mid calf",
+    "polished": "There is erythema of the left lower extremity extending to the mid-calf.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 4267
+  },
+  {
+    "id": "lat_knee",
+    "category": "laterality",
+    "status": "pass",
+    "raw": "the right knee is more swollen than the left",
+    "polished": "The right knee is more swollen than the left.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3377
+  },
+  {
+    "id": "abbr_pt",
+    "category": "ambiguous_abbreviation",
+    "status": "pass",
+    "raw": "The patient will follow up with PT next week",
+    "polished": "The patient will follow up with PT next week.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3390
+  },
+  {
+    "id": "abbr_ms",
+    "category": "ambiguous_abbreviation",
+    "status": "pass",
+    "raw": "The outside note lists MS in the past medical history",
+    "polished": "The outside note lists MS in the past medical history.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3453
+  },
+  {
+    "id": "abbr_pcp",
+    "category": "ambiguous_abbreviation",
+    "status": "pass",
+    "raw": "The consult question concerns PCP prophylaxis",
+    "polished": "The consult question concerns PCP prophylaxis.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3357
+  },
+  {
+    "id": "adv_no_plan",
+    "category": "unsupported_content",
+    "status": "pass",
+    "raw": "Blood cultures grew Staphylococcus aureus",
+    "polished": "Blood cultures grew Staphylococcus aureus.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 7188
+  },
+  {
+    "id": "adv_incomplete",
+    "category": "unsupported_content",
+    "status": "pass",
+    "raw": "The patient was started on antibiotics for",
+    "polished": "The patient was started on antibiotics for",
+    "violations": [],
+    "flags": 1,
+    "latency_ms": 6234
+  },
+  {
+    "id": "adv_differential",
+    "category": "unsupported_content",
+    "status": "pass",
+    "raw": "The differential includes pyelonephritis and nephrolithiasis",
+    "polished": "The differential includes pyelonephritis and nephrolithiasis.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3806
+  },
+  {
+    "id": "allergy_penicillin",
+    "category": "allergy",
+    "status": "pass",
+    "raw": "The patient reports that the outside records indicate a penicillin allergy",
+    "polished": "The patient reports that the outside records indicate a penicillin allergy.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3788
+  },
+  {
+    "id": "attr_family",
+    "category": "attribution",
+    "status": "pass",
+    "raw": "The family states that the fevers began before admission",
+    "polished": "The family states that the fevers began before admission.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3442
+  },
+  {
+    "id": "date_duration",
+    "category": "date_time",
+    "status": "pass",
+    "raw": "The patient reports three days of dysuria and left flank pain",
+    "polished": "The patient reports three days of dysuria and left flank pain.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3677
+  },
+  {
+    "id": "org_no_speciation",
+    "category": "organism",
+    "status": "pass",
+    "raw": "Blood cultures grew Enterococcus",
+    "polished": "Blood cultures grew Enterococcus.",
+    "violations": [],
+    "flags": 0,
+    "latency_ms": 3073
+  }
+]

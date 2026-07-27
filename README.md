@@ -20,17 +20,19 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 0 | Inspect and document the machine | Complete — [`docs/environment.md`](docs/environment.md) |
 | 1 | Local raw transcription | Complete — [`docs/baseline-errors.md`](docs/baseline-errors.md) |
 | 2 | Medical terminology in ASR | Complete — in-sample only; [does not generalize](docs/phase2-results.md#8a-held-out-evaluation--the-prompt-does-not-generalize) |
-| 3 | Constrained medical polishing | Built — [qwen2.5:14b passes 21/21](docs/phase3-results.md#5a-qwen2514b--passes-and-the-glossary-finding-replicates), awaiting approval |
+| 3 | Constrained medical polishing | Built, **deferred** — [ADR 0001](docs/decisions/0001-defer-local-polishing-model.md) |
 | 4 | Protected-token validator | Complete — [40/40 tests, 100% precision](docs/phase4-results.md) |
-| 5 | Desktop integration | Not started |
+| 5 | Desktop integration | Partial — VAD gate, review interface; no paste path |
 | 6 | Synthetic medical test suite | Not started |
 | 7 | Offline and privacy verification | Not started |
 | 8 | Deployment | Not started |
 
-**Not usable for real dictation yet.** Transcription, polishing, and validation
-all work end to end (`scripts/pipeline_demo.py`), but polishing is disabled
-pending your approval of a model, and there is no paste path — Phase 5 is not
-implemented and must not be until you approve one. Automatic pasting is not implemented and must not be
+**Usable for reviewed, raw-transcript dictation; not for automatic pasting.**
+`scripts/dictate.py` records, gates on voice activity, transcribes, validates,
+and presents the result for review. Polishing is deliberately disabled
+([ADR 0001](docs/decisions/0001-defer-local-polishing-model.md)). There is no
+paste-at-cursor path, by design — CLAUDE.md §11 forbids skipping to automatic
+pasting, and Phase 8's checklist is not complete. Automatic pasting is not implemented and must not be
 until Phase 4 passes (CLAUDE.md §11).
 
 ---

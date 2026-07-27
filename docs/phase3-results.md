@@ -3,8 +3,10 @@
 Measured 2026-07-27. Review gate for CLAUDE.md §6 Phase 3.
 
 **Outcome: `llama3.1:8b` is rejected (14/17). `qwen2.5:14b` passes 21/21
-without the glossary, reproduced across two runs, and is a candidate awaiting
-user approval. Polishing remains disabled in `config/app.yaml`.**
+without the glossary, reproduced across two runs — and was DEFERRED, not
+adopted, on memory and latency grounds. See
+[ADR 0001](decisions/0001-defer-local-polishing-model.md). Polishing is
+disabled in `config/app.yaml`.**
 
 Sections 1-5 record the llama3.1:8b evaluation that motivated the search for a
 better model. Section 5a covers qwen2.5:14b and is the current state.
@@ -245,16 +247,19 @@ on it to draw attention.
 
 ### Recommendation
 
-**qwen2.5:14b with `send_glossary: false` is a defensible approval candidate.**
-It is not enabled here, because approval is the user's decision and because two
-things should be settled first:
+**qwen2.5:14b with `send_glossary: false` met the technical bar and was
+nevertheless deferred** (ADR 0001, 2026-07-27). The evaluation stands; the
+decision was about cost on this hardware:
 
-1. Latency and memory behaviour under realistic sequential use, with whisper and
-   the polisher alternating rather than measured in isolation.
-2. Whether 21 cases is a sufficient bar. They cover the categories CLAUDE.md
-   §4.1 names, but they are the cases that were thought of. The validator now
-   provides defence in depth regardless, which materially lowers the risk of
-   enabling a model that later fails an untested case.
+1. 9.1 GB resident on a 16 GB machine, against whisper's further 1.6 GB, on a
+   machine also running the user's own work.
+2. ~4.4 s to polish, ~6.5 s end to end per utterance.
+3. The polisher adds sentence-level tidying, not safety. The Phase 4 validator
+   carries the safety properties and runs whether or not polishing is enabled.
+
+Full case-by-case results for both models are preserved in
+`docs/archive/polisher_eval_*.json` so this can be revisited without re-running
+anything.
 
 ---
 

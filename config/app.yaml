@@ -35,13 +35,15 @@ transcription:
   vad_gate: true
 
 polishing:
-  # DISABLED pending user approval of a model.
+  # DISABLED. Decision taken 2026-07-27; see
+  # docs/decisions/0001-defer-local-polishing-model.md
   #
   # qwen2.5:14b passes 21/21 with send_glossary: false, reproduced across two
-  # runs, and is a defensible approval candidate. It is not enabled here
-  # because approving a model that rewrites clinical text is the user's
-  # decision. See docs/phase3-results.md section 5a for latency and memory
-  # caveats: 9.1 GB resident on a 16 GB machine, ~4.4 s per utterance.
+  # runs, and was NOT adopted -- 9.1 GB resident on a 16 GB machine, ~4.4 s per
+  # utterance, and the polisher adds tidying rather than safety. The validator
+  # carries the safety properties and runs regardless.
+  #
+  # The evaluation is archived, not discarded. To revisit, read that ADR.
   #
   # llama3.1:8b is REJECTED: 14/17 without the glossary, 11/17 with it,
   # failing every ambiguous-abbreviation case in both configurations. It
@@ -54,7 +56,7 @@ polishing:
 
   provider: local
   endpoint: http://127.0.0.1:11434
-  # Candidate, pending approval: qwen2.5:14b (21/21)
+  # Evaluated and deferred: qwen2.5:14b (21/21) -- see ADR 0001
   model: REPLACE_WITH_APPROVED_LOCAL_MODEL
   temperature: 0
   mode: clinical_strict
