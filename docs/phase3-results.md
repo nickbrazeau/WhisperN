@@ -2,8 +2,12 @@
 
 Measured 2026-07-27. Review gate for CLAUDE.md §6 Phase 3.
 
-**Outcome: no local polishing model is approved. Polishing is disabled in
-`config/app.yaml`.**
+**Outcome: `llama3.1:8b` is rejected (14/17). `qwen2.5:14b` passes 21/21
+without the glossary, reproduced across two runs, and is a candidate awaiting
+user approval. Polishing remains disabled in `config/app.yaml`.**
+
+Sections 1-5 record the llama3.1:8b evaluation that motivated the search for a
+better model. Section 5a covers qwen2.5:14b and is the current state.
 
 ---
 
@@ -16,7 +20,7 @@ Measured 2026-07-27. Review gate for CLAUDE.md §6 Phase 3.
 | `src/pipeline/polisher.py` | `LocalPolisher`, loopback-only, fail-closed |
 | `scripts/polish_transcript.py` | Standalone polishing command |
 | `scripts/eval_polisher.py` | Adversarial evaluation harness; gates model approval |
-| `tests/fixtures/synthetic/polisher_cases.yaml` | 17 adversarial cases |
+| `tests/fixtures/synthetic/polisher_cases.yaml` | 21 adversarial cases |
 
 ### Local-only enforcement
 
