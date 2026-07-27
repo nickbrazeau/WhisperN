@@ -100,6 +100,9 @@ def main() -> int:
                     help="copy the result to the clipboard (explicit user action)")
     ap.add_argument("--no-vad", action="store_true",
                     help="disable the voice-activity gate (not recommended)")
+    ap.add_argument("--json", action="store_true",
+                    help="emit a machine-readable result on stdout (for the "
+                         "Hammerspoon shell); suppresses the human output")
     ap.add_argument("--config", type=Path, default=REPO_ROOT / "config/app.yaml")
     args = ap.parse_args()
 
@@ -111,15 +114,22 @@ def main() -> int:
     use_vad = not args.no_vad
 
     # Visible mode indicator (CLAUDE.md §6 Phase 5.10). The user must be able
-    # to tell at a glance whether text is being rewritten.
-    print(f"\n{BOLD}WhisperN{RST}  {DIM}local dictation{RST}")
-    print(f"  mode      : {BOLD}{mode}{RST}")
-    if polishing_on and model and not model.startswith("REPLACE"):
-        print(f"  polishing : {YEL}ON{RST} ({model})")
-    else:
-        print(f"  polishing : {GRN}OFF{RST}  {DIM}raw transcript only{RST}")
-    print(f"  VAD gate  : {GRN}ON{RST}" if use_vad else f"  VAD gate  : {RED}OFF{RST}")
-    print(f"  paste     : {GRN}DISABLED{RST}  {DIM}(review only){RST}\n")
+    # to tell at a glance whether text is being rewritten. In --json mode the
+    # caller renders its own indicator; see hammerspoon/init.lua.
+    quiet = args.json
+    if not quiet:
+        print(f"\n{BOLD}WhisperN{RST}  {DIM}local dictation{RST}")
+    if not quiet:
+        print(f"  mode      : {BOLD}{mode}{RST}")
+    if not quiet:
+        if polishing_on and model and not model.startswith("REPLACE"):
+            print(f"  polishing : {YEL}ON{RST} ({model})")
+        else:
+            print(f"  polishing : {GRN}OFF{RST}  {DIM}raw transcript only{RST}")
+    if not quiet:
+        print(f"  VAD gate  : {GRN}ON{RST}" if use_vad else f"  VAD gate  : {RED}OFF{RST}")
+    if not quiet:
+        print(f"  paste     : {GRN}DISABLED{RST}  {DIM}(review only){RST}\n")
 
     polisher = None
     if polishing_on and model and not model.startswith("REPLACE"):
@@ -176,11 +186,31 @@ def main() -> int:
         if tmp_audio is not None:
             tmp_audio.unlink(missing_ok=True)
 
-    return present(result, args.copy)
+    return present(result, args.copy, args.json)
 
 
-def present(result, copy: bool) -> int:
+def present(result, copy: bool, as_json: bool = False) -> int:
     """Render the result, including the review interface for unsafe outcomes."""
+    if as_json:
+        import json as _json
+        text = result.text_to_use
+        if copy and text:
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=False)
+        print(_json.dumps({
+            "outcome": result.outcome.value,
+            "text": text,
+            "raw_text": result.raw_text,
+            "polished_text": result.polished_text,
+            "warnings": result.warnings,
+            "protected_changes": [c.detail for c in result.protected_changes],
+            "copied": bool(copy and text),
+            "transcribe_ms": result.transcribe_ms,
+            "polish_ms": result.polish_ms,
+            "error": result.error,
+        }))
+        return {Outcome.SAFE: 0, Outcome.REVIEW: 1, Outcome.REJECTED: 2,
+                Outcome.NO_SPEECH: 0, Outcome.FAILED: 4}[result.outcome]
+
     if result.outcome is Outcome.NO_SPEECH:
         # Not an error. Saying nothing must produce nothing -- the alternative
         # is a hallucinated phrase, which is what the VAD gate exists to stop.
