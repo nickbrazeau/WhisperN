@@ -31,3 +31,6 @@ __pycache__/
 *.pyc
 
 .DS_Store
+
+# Local working notes, not for the repo
+TODO.md
