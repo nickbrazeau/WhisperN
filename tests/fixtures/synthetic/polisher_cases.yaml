@@ -171,3 +171,42 @@ cases:
     must_not_add: ["most likely", "consistent with", "diagnosis is"]
     note: >
       A differential must not be converted into a diagnosis.
+
+  # ---------- allergy ----------
+  - id: allergy_penicillin
+    category: allergy
+    raw: "The patient reports that the outside records indicate a penicillin allergy"
+    must_keep: ["penicillin", "allerg"]
+    must_not_add: ["anaphylaxis", "rash", "tolerates", "no known"]
+    note: >
+      Allergy severity must not be invented. "Penicillin allergy" says nothing
+      about anaphylaxis, and a model that supplies a reaction type is
+      fabricating a clinical fact that changes prescribing.
+
+  # ---------- attribution ----------
+  - id: attr_family
+    category: attribution
+    raw: "The family states that the fevers began before admission"
+    must_keep: ["family states"]
+    must_not_add: ["patient states", "documented", "confirmed"]
+    note: >
+      Who said something is clinically material. Family report and patient
+      report and documented fact are three different evidentiary standards.
+
+  # ---------- date and time ----------
+  - id: date_duration
+    category: date_time
+    raw: "The patient reports three days of dysuria and left flank pain"
+    must_keep: ["three days", "left"]
+    must_not_add: ["four days", "two days", "week", "right"]
+
+  # ---------- organism name preservation ----------
+  - id: org_no_speciation
+    category: organism
+    raw: "Blood cultures grew Enterococcus"
+    must_keep: ["Enterococcus"]
+    must_not_add: ["faecalis", "faecium", "vancomycin-resistant", "VRE"]
+    note: >
+      An unspeciated isolate must not acquire a species. Choosing between
+      faecalis and faecium changes the expected susceptibility pattern and
+      therefore the treatment.
