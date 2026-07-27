@@ -219,3 +219,36 @@ def test_all_required_categories_are_detectable():
                      Category.ROUTE, Category.FREQUENCY, Category.LATERALITY,
                      Category.UNCERTAINTY):
         assert required in found, f"{required.value} not extracted"
+
+
+# ---------------------------------------------------------------- VAD gate
+
+@pytest.fixture(scope="module")
+def pipeline():
+    from pipeline.dictation import DictationPipeline
+    return DictationPipeline(repo_root=REPO_ROOT)
+
+
+@pytest.mark.parametrize("name", ["silence.wav", "roomtone.wav"])
+def test_vad_gate_rejects_non_speech(pipeline, name):
+    """Whisper invents text from non-speech; the gate must stop it reaching the model.
+
+    Without the gate, digital silence transcribes as "you" and room tone as
+    "-". No downstream stage can detect this: the validator compares polished
+    text against the raw transcript, so an ASR fabrication is already inside
+    the trusted baseline.
+    """
+    audio = REPO_ROOT / "runtime/tmp/vadtest" / name
+    if not audio.exists():
+        pytest.skip(f"fixture {name} not generated")
+    assert pipeline.has_speech(audio) is False
+
+
+def test_vad_gate_accepts_all_real_speech(pipeline):
+    """A false negative silently discards a dictation, which is worse than a
+    false positive. All 33 recorded utterances must pass the gate."""
+    wavs = sorted((REPO_ROOT / "runtime/tmp/corpus_real").glob("phrase_*.wav"))
+    if not wavs:
+        pytest.skip("real corpus not recorded")
+    missed = [w.name for w in wavs if not pipeline.has_speech(w)]
+    assert not missed, f"gate discarded real speech: {missed}"

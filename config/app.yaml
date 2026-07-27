@@ -17,6 +17,23 @@ transcription:
   # Budget is 224 tokens (n_text_ctx/2); roughly 16 terms fit.
   specialty: infectious_diseases
 
+  # Voice-activity gate. Runs the VAD model BEFORE transcription and skips the
+  # model entirely when no speech segment is found.
+  #
+  # Necessary because Whisper invents text from non-speech: digital silence
+  # transcribes as "you", room tone as "-". Nothing downstream can catch that,
+  # since the validator treats the raw transcript as its reference.
+  #
+  # Used as a gate, never as a filter. whisper-cli's own --vad flag trims audio
+  # to the detected segments, which costs accuracy: content WER 13.68% ->
+  # 15.31%, and piperacillin-tazobactam degraded to "pipercyllum-tazoza-bactam".
+  # Padding barely helped (14.98% at 400 ms). Gating and then transcribing the
+  # untrimmed audio keeps the protection at no accuracy cost.
+  #
+  # Measured: 33/33 real utterances pass the gate, 2/2 non-speech rejected,
+  # ~79 ms per utterance.
+  vad_gate: true
+
 polishing:
   # DISABLED pending user approval of a model.
   #

@@ -19,6 +19,7 @@ transcription happens at all.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import subprocess
 import tempfile
@@ -83,6 +84,41 @@ class DictationPipeline:
 
     # -- stage 1: transcription with the VAD gate --------------------------
 
+    def has_speech(self, wav: Path) -> bool:
+        """Return True if the VAD model finds any speech segment.
+
+        Used as a **gate**, not a filter. whisper-cli's own --vad flag trims
+        the audio to detected segments before transcribing, which measurably
+        degrades recognition: content WER on the real corpus rose from 13.68%
+        to 15.31%, and piperacillin-tazobactam became "pipercyllum-tazoza-
+        bactam". Padding the segments barely helped (14.98% at 400 ms).
+
+        Detecting speech and then transcribing the *untrimmed* audio gets the
+        hallucination protection without paying that cost.
+        """
+        vad_bin = self.repo_root / "whisper.cpp/build/bin/whisper-vad-speech-segments"
+        if not vad_bin.exists() or not self.vad_model.exists():
+            log.warning("VAD unavailable; proceeding without the speech gate")
+            return True
+        try:
+            proc = subprocess.run(
+                [str(vad_bin), "-vm", str(self.vad_model), "-f", str(wav)],
+                capture_output=True, timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            # Fail open on gate failure: refusing to transcribe real speech
+            # because a helper crashed would be worse than the hallucination
+            # risk, and everything downstream still applies.
+            log.warning("VAD gate failed (%s); proceeding", exc)
+            return True
+
+        out = proc.stdout.decode(errors="replace")
+        m = re.search(r"Detected\s+(\d+)\s+speech segments", out)
+        if not m:
+            log.warning("could not parse VAD output; proceeding")
+            return True
+        return int(m.group(1)) > 0
+
     def transcribe(self, audio: Path) -> tuple[str, int]:
         """Transcribe `audio`. Returns (text, elapsed_ms).
 
@@ -100,11 +136,16 @@ class DictationPipeline:
                 check=True, capture_output=True,
             )
 
+            # Gate first. If there is no speech, do not run the model at all:
+            # Whisper invents text from non-speech, and nothing downstream can
+            # tell an invented phrase from a real one.
+            if self.use_vad and not self.has_speech(wav):
+                return "", int((time.monotonic() - started) * 1000)
+
+            # Transcribe the FULL audio. No --vad here, deliberately.
             args = [str(self.whisper_bin), "-m", str(self.model), "-f", str(wav),
                     "-l", "en", "-nt", "-np",
                     "--output-txt", "--output-file", str(tmpdir / "out")]
-            if self.use_vad and self.vad_model.exists():
-                args += ["--vad", "-vm", str(self.vad_model)]
             if self.prompt_file and self.prompt_file.exists():
                 args += ["--prompt", self.prompt_file.read_text(encoding="utf-8").strip()]
 
