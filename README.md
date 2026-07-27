@@ -25,7 +25,7 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 5 | Desktop integration | Partial — VAD gate, review interface; no paste path |
 | 6 | Synthetic medical test suite | Complete — [gate passed](docs/phase6-results.md); named-entity accuracy 62.5% |
 | 7 | Offline and privacy verification | Complete — [16/16 checks](docs/validation-report.md) |
-| 8 | Deployment | Not started |
+| 8 | Deployment | Checklist complete — [guide](docs/deployment.md); glossary reviewed 2026-07-27 |
 
 **Usable for reviewed, raw-transcript dictation; not for automatic pasting.**
 `scripts/dictate.py` records, gates on voice activity, transcribes, validates,

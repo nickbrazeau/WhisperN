@@ -8,6 +8,8 @@
 # generated dictionaries (medications.txt, microorganisms.txt) are the
 # vocabulary for validation; this file is the vocabulary for biasing the ASR.
 #
+# Reviewed by the user: 2026-07-27 (CLAUDE.md Phase 8 checklist item 9).
+# Re-review after any substantive change to this file.
 # Contains no patient information.
 
 # === PROMPT PRIORITY BLOCK ===

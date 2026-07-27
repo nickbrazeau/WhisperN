@@ -1,6 +1,8 @@
 # Procedures and specimen/source terminology.
 #
 # Hand-curated and PROMPT-ELIGIBLE.
+# Reviewed by the user: 2026-07-27 (CLAUDE.md Phase 8 checklist item 9).
+# Re-review after any substantive change to this file.
 # Contains no patient information.
 
 bronchoalveolar lavage

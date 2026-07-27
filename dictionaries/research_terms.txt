@@ -5,6 +5,8 @@
 # and because CLAUDE.md section 3.3 defines a `research` mode that must
 # preserve statistical notation, gene names, organism names, and acronyms.
 #
+# Reviewed by the user: 2026-07-27 (CLAUDE.md Phase 8 checklist item 9).
+# Re-review after any substantive change to this file.
 # Contains no patient information.
 
 # --- statistics and inference ---

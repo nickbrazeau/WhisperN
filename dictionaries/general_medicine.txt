@@ -5,6 +5,8 @@
 # already handles are deliberately omitted -- every token here costs prompt
 # budget that a harder term could use.
 #
+# Reviewed by the user: 2026-07-27 (CLAUDE.md Phase 8 checklist item 9).
+# Re-review after any substantive change to this file.
 # Contains no patient information.
 
 # --- presenting problems ---
