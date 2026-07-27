@@ -19,8 +19,8 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 |---|---|---|
 | 0 | Inspect and document the machine | Complete — [`docs/environment.md`](docs/environment.md) |
 | 1 | Local raw transcription | Complete — [`docs/baseline-errors.md`](docs/baseline-errors.md) |
-| 2 | Medical terminology in ASR | Complete — content WER 15.31% → 12.70% |
-| 3 | Constrained medical polishing | Not started |
+| 2 | Medical terminology in ASR | Complete — in-sample only; [does not generalize](docs/phase2-results.md#8a-held-out-evaluation--the-prompt-does-not-generalize) |
+| 3 | Constrained medical polishing | In progress |
 | 4 | Protected-token validator | Not started |
 | 5 | Desktop integration | Not started |
 | 6 | Synthetic medical test suite | Not started |

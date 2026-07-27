@@ -1,0 +1,79 @@
+# HELD-OUT evaluation corpus.
+#
+# PURPOSE: estimate whether the Phase 2 ASR prompt generalises, or whether its
+# gains are confined to the terms it happens to contain.
+#
+# CONSTRUCTION RULE — do not violate it, or this file loses all value:
+#
+#   No term in the 16-term ASR prompt priority block may appear here, and no
+#   phrase from dictation_corpus.txt may be reused. The terminology below was
+#   chosen BEFORE looking at any result on this audio, and no term here may
+#   ever be promoted into the prompt priority block on the basis of failing
+#   here. Doing so converts this into training data.
+#
+# The prompt contains: linezolid, cefepime, piperacillin-tazobactam,
+# trimethoprim-sulfamethoxazole, Pseudomonas aeruginosa, Pneumocystis
+# jirovecii, Enterococcus faecium, MSSA, MRSA, Clostridioides difficile,
+# Staphylococcus aureus, Streptococcus pneumoniae, Escherichia coli,
+# Klebsiella pneumoniae, Staphylococcus epidermidis, Candida auris.
+# None of those appear below.
+#
+# All phrases are constructed and describe no real person.
+# Categories mirror CLAUDE.md section 6, Phase 6.
+
+# --- organisms not in the prompt ---
+Cerebrospinal fluid cultures grew Listeria monocytogenes.
+The abscess culture yielded Bacteroides fragilis and Prevotella species.
+Serum cryptococcal antigen was positive and cultures grew Cryptococcus neoformans.
+The wound culture grew Serratia marcescens resistant to ceftriaxone.
+Sputum cultures were positive for Nocardia farcinica.
+Galactomannan was elevated and cultures grew Aspergillus fumigatus.
+Urine cultures grew Proteus mirabilis with an alkaline urine pH.
+The blood culture isolate was Streptococcus mitis, penicillin susceptible.
+
+# --- antimicrobials not in the prompt ---
+Continue ertapenem one gram intravenously daily for four weeks.
+Start micafungin one hundred milligrams intravenously daily.
+Transition to oral posaconazole delayed release three hundred milligrams daily.
+Add rifampin six hundred milligrams orally daily for biofilm penetration.
+Begin doxycycline one hundred milligrams twice daily for fourteen days.
+Continue metronidazole five hundred milligrams every eight hours.
+Start dalbavancin fifteen hundred milligrams as a single dose.
+Change to ceftaroline six hundred milligrams every eight hours.
+
+# --- syndromes not in the prompt ---
+Magnetic resonance imaging demonstrated a thoracic epidural abscess.
+The patient underwent debridement for necrotizing fasciitis of the thigh.
+Arthrocentesis confirmed septic arthritis of the left shoulder.
+Chest imaging showed a loculated empyema requiring thoracostomy.
+
+# --- negation ---
+There is no evidence of metastatic infection on the survey.
+The patient denies recent travel, sick contacts, or animal exposure.
+Repeat imaging shows no residual collection.
+
+# --- uncertainty and attribution ---
+The elevated inflammatory markers may reflect an alternative source.
+Culture-negative endocarditis remains on the differential but is unproven.
+The family states that the fevers began before admission.
+
+# --- numbers, units, laboratory values ---
+The vancomycin trough was seventeen point two micrograms per milliliter.
+The procalcitonin fell from four point eight to zero point six.
+The platelet count declined from two hundred twelve thousand to sixty-four thousand.
+Weight-based dosing was calculated at four point five milligrams per kilogram.
+
+# --- laterality and anatomy ---
+There is tenderness over the right sacroiliac joint.
+The effusion is larger on the left than on the right.
+The lesion is located in the left upper lobe anteriorly.
+
+# --- ambiguous abbreviations (must NOT be expanded) ---
+The note documents a prior CVA with residual weakness.
+Her history includes RA treated with methotrexate.
+The differential includes PE given the pleuritic pain.
+
+# --- research terminology not in the prompt ---
+We estimated the effective reproduction number using a renewal equation.
+Isolates were assigned to transmission clusters using core genome typing.
+The model adjusted for confounding using inverse probability weighting.

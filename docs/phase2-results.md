@@ -190,6 +190,73 @@ context and should if anything cost slightly more.
 
 ---
 
+## 8a. Held-out evaluation — the prompt does not generalize
+
+Added 2026-07-27, after §9's final caveat was acted on.
+
+`tests/fixtures/synthetic/heldout_corpus.txt` contains 39 phrases and 356
+reference words using terminology **deliberately disjoint from the prompt**.
+Verified programmatically: none of the 16 prompt terms appears in it, and no
+phrase overlaps `dictation_corpus.txt`. Different antibiotics (`ertapenem`,
+`micafungin`, `dalbavancin`, `ceftaroline`), different organisms
+(`Listeria monocytogenes`, `Serratia marcescens`, `Cryptococcus neoformans`),
+different syndromes, different abbreviations.
+
+Same model, same prompt, same settings. Synthetic audio.
+
+| | Content WER | Medical-term accuracy |
+|---|---|---|
+| **In-sample** (dictation_corpus, real voice) | 15.31 % → **12.70 %** | 73.0 % → **83.8 %** |
+| **Held-out** (heldout_corpus, synthetic) | 14.89 % → **14.61 %** | 65.1 % → **62.8 %** |
+
+**On held-out terminology the prompt is worth one error in 356 words, and
+medical-term accuracy goes slightly down.**
+
+### What this means
+
+The Phase 2 improvement reported in §3 is **almost entirely in-sample**. Terms
+were promoted into the prompt *because they had been observed to fail on that
+corpus*, and the prompt then fixed several of them. That is a real effect and
+it is useful, but it is not a general improvement in medical transcription:
+
+- The prompt helps the ~16 terms it contains. It does not transfer to
+  neighbouring vocabulary, even within the same specialty.
+- One held-out term regressed (`Streptococcus mitis`, correct without the
+  prompt and wrong with it) — consistent with the `Clostridioides difficile`
+  regression seen in §5.1. Adding terms perturbs decoding for terms not added.
+- Baseline error on held-out text is *higher* than on the in-sample corpus
+  (65.1 % vs 73.0 % medical-term accuracy), so the held-out set is not easier;
+  the prompt simply does not reach it.
+
+### Consequences
+
+1. **§3's headline should be read as "the prompt fixes the terms you put in
+   it".** Reporting 73.0 % → 83.8 % without this section would overstate what
+   Phase 2 achieved.
+2. **The dictionary approach does not scale to a formulary.** With ~16 slots
+   against 13,784 known drugs, per-term prompting cannot cover clinical
+   vocabulary. It is a patch list for observed failures, not a solution.
+3. **Phase 4 becomes the primary safeguard, not a backstop.** Since ASR
+   accuracy cannot be raised generally by this mechanism, the system's safety
+   has to come from *detecting* wrong drug and organism names rather than
+   preventing them. The 20,000-term validation dictionaries are the right tool
+   for that, and they are already built.
+4. **Prompt maintenance should be evidence-driven and bounded.** Terms enter
+   the priority block only on observed failure, and the block cannot usefully
+   grow past the token budget. `heldout_corpus.txt` must never be used to
+   select prompt terms, or it stops measuring generalization.
+
+### Caveat on this measurement
+
+The held-out audio is synthetic; the in-sample comparison used real voice.
+Synthetic speech has lower error overall (§3), so the two rows are not
+perfectly matched. What is directly comparable is each row's own
+before/after, and on that basis the contrast is stark: +10.8 points in-sample
+versus −2.3 points held-out. A real-voice recording of the held-out corpus
+would settle it completely and is the recommended next measurement.
+
+---
+
 ## 9. Caveats
 
 - 33 utterances per corpus is enough to see a large effect and not enough to
