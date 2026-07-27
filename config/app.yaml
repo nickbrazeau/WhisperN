@@ -1,0 +1,68 @@
+# Application configuration.
+#
+# The endpoint below is a loopback address and is validated at runtime:
+# src/pipeline/polisher.py refuses any non-loopback host, and refuses
+# hostnames outright because resolution can change.
+
+transcription:
+  engine: whisper_cpp
+  model: large-v3-turbo
+  language: en
+  local_only: true
+  cloud_fallback: false
+  save_audio: false
+  save_transcripts: false
+  initial_prompt_enabled: true
+  # Specialty whose `prompt` dictionaries build the Whisper initial prompt.
+  # Budget is 224 tokens (n_text_ctx/2); roughly 16 terms fit.
+  specialty: infectious_diseases
+
+polishing:
+  # DISABLED. No local model has passed the adversarial case set.
+  #
+  # llama3.1:8b scores 11/17 with the glossary supplied and 14/17 without,
+  # failing every ambiguous-abbreviation case in both configurations. See
+  # docs/phase3-results.md. Enabling it would allow, among others,
+  # "MS" -> "methicillin-sensitive Staphylococcus aureus (MS)", which inserts
+  # a fabricated infection into the record.
+  #
+  # Do not set this true until a model passes scripts/eval_polisher.py with
+  # zero failures, and do not relax the cases to get there (CLAUDE.md 9).
+  enabled: false
+
+  provider: local
+  endpoint: http://127.0.0.1:11434
+  model: REPLACE_WITH_APPROVED_LOCAL_MODEL
+  temperature: 0
+  mode: clinical_strict
+  timeout_seconds: 20
+  retries: 0
+  cloud_fallback: false
+
+  # Whether to send the specialty glossary with the transcript.
+  #
+  # Measured to make llama3.1:8b WORSE: 64.7% vs 82.4% pass rate. The glossary
+  # induces "correction" toward nearby approved terms -- it turned
+  # "no evidence of endocarditis" into "no evidence of infective endocarditis"
+  # and "PCP" into "Pneumocystis jirovecii pneumonia".
+  #
+  # Re-measure per model rather than assuming this generalises.
+  send_glossary: false
+
+validation:
+  protect_negation: true
+  protect_numbers: true
+  protect_units: true
+  protect_dates: true
+  protect_laterality: true
+  protect_medications: true
+  protect_organisms: true
+  protect_uncertainty: true
+  require_review_on_protected_change: true
+
+storage:
+  temporary_directory: runtime/tmp
+  delete_temporary_audio: true
+  transcript_history: false
+  prompt_logging: false
+  response_logging: false

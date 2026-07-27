@@ -20,15 +20,16 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 0 | Inspect and document the machine | Complete — [`docs/environment.md`](docs/environment.md) |
 | 1 | Local raw transcription | Complete — [`docs/baseline-errors.md`](docs/baseline-errors.md) |
 | 2 | Medical terminology in ASR | Complete — in-sample only; [does not generalize](docs/phase2-results.md#8a-held-out-evaluation--the-prompt-does-not-generalize) |
-| 3 | Constrained medical polishing | In progress |
+| 3 | Constrained medical polishing | Built, **not approved** — [no model passes](docs/phase3-results.md) |
 | 4 | Protected-token validator | Not started |
 | 5 | Desktop integration | Not started |
 | 6 | Synthetic medical test suite | Not started |
 | 7 | Offline and privacy verification | Not started |
 | 8 | Deployment | Not started |
 
-**Not usable for real dictation yet.** Polishing and the protected-token
-validator do not exist. Automatic pasting is not implemented and must not be
+**Not usable for real dictation yet.** Polishing is implemented but disabled:
+no local model passes the adversarial case set. The protected-token validator
+does not exist. Automatic pasting is not implemented and must not be
 until Phase 4 passes (CLAUDE.md §11).
 
 ---
