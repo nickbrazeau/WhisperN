@@ -178,6 +178,82 @@ would have caught either failure.
 
 ---
 
+## 5a. qwen2.5:14b — passes, and the glossary finding replicates
+
+Added 2026-07-27, acting on recommendations 1 and 2 above.
+
+The case set was extended from 17 to 21 to meet the gate (allergy, attribution,
+date/duration, organism speciation).
+
+| Model | Glossary | Passed |
+|---|---|---|
+| llama3.1:8b | supplied | 11/17 (64.7 %) |
+| llama3.1:8b | none | 14/17 (82.4 %) |
+| **qwen2.5:14b** | supplied | 15/17 (88.2 %) |
+| **qwen2.5:14b** | **none** | **21/21 (100 %)** — twice |
+
+Two independent runs of the full 21 cases both returned 21/21, so the result is
+reproducible rather than a lucky sample.
+
+### The glossary finding replicates
+
+Supplying the glossary degraded **both** models — llama from 82.4 % to 64.7 %,
+qwen from 100 % to 88.2 % — by the same mechanism. qwen turned
+`PCP prophylaxis` into `Pneumocystis jirovecii pneumonia (PCP) prophylaxis`;
+`Pneumocystis jirovecii` is in the glossary.
+
+Replication across two models of different families and sizes is stronger
+evidence than either measurement alone. `config/app.yaml` keeps
+`send_glossary: false`, now on evidence rather than inference.
+
+The intended benefit of the glossary — better spelling of medical terms — was
+not observed in any passing case in either model. Its only measured effect was
+harm.
+
+### What qwen fixed
+
+All three ambiguous-abbreviation cases, which llama failed in every
+configuration, including the `MS` → `methicillin-sensitive Staphylococcus
+aureus (MS)` fabrication. qwen leaves `PT`, `MS`, and `PCP` untouched.
+
+It also passed all four new cases: it did not invent an allergy reaction, did
+not promote family report to documented fact, did not alter a stated duration,
+and did not speciate a bare `Enterococcus`.
+
+### Where it is still weak
+
+**One flag across 21 cases.** Rule 10 asks the model to flag uncertain spans
+rather than resolve them silently. qwen leaves ambiguous text alone — which is
+the important half — but does not tell the reviewer it noticed. The structured
+`flags` array remains effectively unused, so the review interface cannot rely
+on it to draw attention.
+
+### Practical cost
+
+- **Memory.** `ollama ps` reports 9.1 GB resident, 100 % GPU, on a 16 GB
+  machine with 12 % system memory free. Whisper's `large-v3-turbo` needs a
+  further 1.6 GB. The pipeline is sequential so the two need not be co-resident,
+  but ollama will evict and reload between utterances, costing roughly 5 s of
+  cold load.
+- **Latency.** About 4.4 s to polish a single warm sentence end to end. Added to
+  ~2 s of transcription, that is ~6.5 s per utterance before any paste. Usable
+  for correspondence and note drafting; noticeably slow for rapid dictation.
+
+### Recommendation
+
+**qwen2.5:14b with `send_glossary: false` is a defensible approval candidate.**
+It is not enabled here, because approval is the user's decision and because two
+things should be settled first:
+
+1. Latency and memory behaviour under realistic sequential use, with whisper and
+   the polisher alternating rather than measured in isolation.
+2. Whether 21 cases is a sufficient bar. They cover the categories CLAUDE.md
+   §4.1 names, but they are the cases that were thought of. The validator now
+   provides defence in depth regardless, which materially lowers the risk of
+   enabling a model that later fails an untested case.
+
+---
+
 ## 6. Status against the Phase 3 review gate
 
 The gate asks for at least 20 synthetic examples covering medication names,
@@ -192,8 +268,8 @@ successful corrections and deliberately ambiguous cases left unchanged.
       changes, and self-checks that digit counts and non-whitespace content are
       unaltered.
 - [x] Schema rejection implemented and unit-tested.
-- [~] **17 adversarial cases, not 20.** Three more are needed to meet the gate
-      as written; the categories required by the gate are all covered.
+- [x] **21 adversarial cases** (17 original plus allergy, attribution,
+      date/duration, and organism speciation), meeting the gate's minimum of 20.
 - [x] Ambiguous cases that must remain unchanged are included — and are exactly
       what failed.
 - [ ] **Successful corrections could not be demonstrated**, because no model is

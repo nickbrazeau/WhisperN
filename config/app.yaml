@@ -18,20 +18,26 @@ transcription:
   specialty: infectious_diseases
 
 polishing:
-  # DISABLED. No local model has passed the adversarial case set.
+  # DISABLED pending user approval of a model.
   #
-  # llama3.1:8b scores 11/17 with the glossary supplied and 14/17 without,
-  # failing every ambiguous-abbreviation case in both configurations. See
-  # docs/phase3-results.md. Enabling it would allow, among others,
-  # "MS" -> "methicillin-sensitive Staphylococcus aureus (MS)", which inserts
-  # a fabricated infection into the record.
+  # qwen2.5:14b passes 21/21 with send_glossary: false, reproduced across two
+  # runs, and is a defensible approval candidate. It is not enabled here
+  # because approving a model that rewrites clinical text is the user's
+  # decision. See docs/phase3-results.md section 5a for latency and memory
+  # caveats: 9.1 GB resident on a 16 GB machine, ~4.4 s per utterance.
   #
-  # Do not set this true until a model passes scripts/eval_polisher.py with
-  # zero failures, and do not relax the cases to get there (CLAUDE.md 9).
+  # llama3.1:8b is REJECTED: 14/17 without the glossary, 11/17 with it,
+  # failing every ambiguous-abbreviation case in both configurations. It
+  # expanded "MS" to "methicillin-sensitive Staphylococcus aureus (MS)",
+  # inserting a fabricated infection into the record.
+  #
+  # Do not enable a model until it passes scripts/eval_polisher.py with zero
+  # failures, and do not relax the cases to get there (CLAUDE.md 9).
   enabled: false
 
   provider: local
   endpoint: http://127.0.0.1:11434
+  # Candidate, pending approval: qwen2.5:14b (21/21)
   model: REPLACE_WITH_APPROVED_LOCAL_MODEL
   temperature: 0
   mode: clinical_strict
@@ -41,12 +47,15 @@ polishing:
 
   # Whether to send the specialty glossary with the transcript.
   #
-  # Measured to make llama3.1:8b WORSE: 64.7% vs 82.4% pass rate. The glossary
-  # induces "correction" toward nearby approved terms -- it turned
+  # Measured to make BOTH tested models worse, by the same mechanism:
+  #   llama3.1:8b  82.4% -> 64.7%
+  #   qwen2.5:14b  100%  -> 88.2%
+  # The glossary induces "correction" toward nearby approved terms. It turned
   # "no evidence of endocarditis" into "no evidence of infective endocarditis"
-  # and "PCP" into "Pneumocystis jirovecii pneumonia".
+  # and "PCP" into "Pneumocystis jirovecii pneumonia (PCP)".
   #
-  # Re-measure per model rather than assuming this generalises.
+  # Replicated across two model families and sizes, so this is unlikely to be
+  # model-specific -- but re-measure when adding a model rather than assuming.
   send_glossary: false
 
 validation:
