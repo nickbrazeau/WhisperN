@@ -21,15 +21,15 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 1 | Local raw transcription | Complete — [`docs/baseline-errors.md`](docs/baseline-errors.md) |
 | 2 | Medical terminology in ASR | Complete — in-sample only; [does not generalize](docs/phase2-results.md#8a-held-out-evaluation--the-prompt-does-not-generalize) |
 | 3 | Constrained medical polishing | Built, **not approved** — [no model passes](docs/phase3-results.md) |
-| 4 | Protected-token validator | Not started |
+| 4 | Protected-token validator | Complete — [40/40 tests, 100% precision](docs/phase4-results.md) |
 | 5 | Desktop integration | Not started |
 | 6 | Synthetic medical test suite | Not started |
 | 7 | Offline and privacy verification | Not started |
 | 8 | Deployment | Not started |
 
-**Not usable for real dictation yet.** Polishing is implemented but disabled:
-no local model passes the adversarial case set. The protected-token validator
-does not exist. Automatic pasting is not implemented and must not be
+**Not usable for real dictation yet.** The protected-token validator works, but
+polishing is disabled: no local model passes the adversarial case set, so there
+is nothing safe to paste. Automatic pasting is not implemented and must not be
 until Phase 4 passes (CLAUDE.md §11).
 
 ---
@@ -85,6 +85,19 @@ Build the ASR context prompt and transcribe with terminology bias:
 .venv/bin/python scripts/build_asr_prompt.py --mode infectious_diseases \
     --out runtime/tmp/asr_prompt.txt --stats
 scripts/transcribe_local.sh audio.wav --prompt-file runtime/tmp/asr_prompt.txt
+```
+
+Validate polished text against a raw transcript (deterministic, no model):
+
+```bash
+scripts/validate_changes.py --raw raw.txt --polished polished.txt
+# exit 0 = safe_to_paste, 1 = review_required, 2 = rejected
+```
+
+Evaluate a candidate polishing model against the adversarial cases:
+
+```bash
+scripts/eval_polisher.py --model qwen2.5:14b
 ```
 
 Rebuild the generated dictionaries from downloaded sources (setup-time only,

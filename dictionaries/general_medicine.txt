@@ -8,6 +8,11 @@
 # Contains no patient information.
 
 # --- presenting problems ---
+musculoskeletal
+biofilm
+galactomannan
+intravenously
+radiographic
 dysuria
 hematuria
 hemoptysis
