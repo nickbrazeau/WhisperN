@@ -1,0 +1,191 @@
+# Validation Report
+
+Consolidated validation evidence for the local medical dictation pipeline.
+CLAUDE.md §11 deliverable 12. Covers Phase 7 (offline and privacy
+verification) and summarises the evidence from Phases 1–6.
+
+Last updated: 2026-07-27.
+
+---
+
+## 1. Offline and privacy verification (Phase 7)
+
+`scripts/offline_smoke_test.sh` — **16 checks, 16 pass, 0 fail, 0 warnings.**
+
+Every check observes behaviour. CLAUDE.md §6 Phase 7 says not to claim the
+system is offline-safe because settings say "local", so nothing here is
+inferred from configuration.
+
+| # | Check | Method | Result |
+|---|---|---|---|
+| 1 | No cloud credentials in environment | `env` scan, 13 provider prefixes | pass |
+| 2 | No provider credential files | `~/.netrc`, `~/.config/openai`, … | pass |
+| 3 | Configured endpoints are loopback | parse `config/*.yaml` | pass (1 endpoint) |
+| 4 | Code *refuses* non-loopback | constructor rejects 4 hostile URLs | pass |
+| 5 | Sandbox actually blocks network | sandboxed `curl` must fail | pass |
+| 6 | Transcription works offline | `sandbox-exec` `(deny network*)` | pass |
+| 7 | Validation works offline | same sandbox | pass |
+| 8 | No sockets during transcription | `lsof` over the process tree | pass |
+| 9 | No temporary audio survives | `find runtime/tmp` | pass |
+| 10 | Cleanup survives SIGTERM | kill mid-transcription | pass |
+| 11 | No transcripts persisted | `find runtime/` | pass |
+| 12 | Source does not log transcripts | grep logging calls | pass |
+| 13 | No audio tracked in git | `git ls-files` | pass |
+| 14 | No transcripts tracked in git | `git ls-files` | pass |
+| 15 | Polisher fails closed | point at closed port `127.0.0.1:9` | pass |
+| 16 | No cloud provider in polisher source | grep | pass |
+
+### Why the network denial is trustworthy
+
+Network access is denied by the kernel through `sandbox-exec` with
+`(deny network*)`, and **the profile is proven before it is relied on**: a
+sandboxed `curl` to an external host must fail, and the suite aborts its
+offline claims if it succeeds. This is stronger than disabling Wi-Fi, which
+proves only that no route existed at that moment.
+
+### A false positive found and fixed
+
+The first run reported *"transcription process opened 120 non-loopback
+sockets"*. That was a defect in the check, not the pipeline: **`lsof` ORs its
+selection criteria unless `-a` is given**, so `lsof -p PID -i` listed every
+internet socket on the machine — `rapportd`, `identityservicesd`, and other
+macOS daemons. With `-a`, and walking the process tree so `whisper-cli` itself
+is inspected, the count is zero.
+
+Recorded because a privacy check that cannot distinguish this process from the
+rest of the system is worse than no check: it produces alarming numbers nobody
+can act on, and its real failures would be lost in the noise.
+
+### Report redaction
+
+Reports are written to `runtime/audit/` (gitignored) and contain check
+outcomes, counts, and paths only. Verified: the generated report contains
+**zero clinical terms**. Transcript word counts are recorded; transcript text
+never is.
+
+---
+
+## 2. Clinical-fidelity evidence (Phases 4 and 6)
+
+### Protected content
+
+Across the real-voice and held-out corpora, **85 protected tokens**:
+
+| Category | Preservation |
+|---|---|
+| Numbers and units | **100 %** (67/67) |
+| Negation | **100 %** (8/8) |
+| Laterality | **100 %** (10/10) |
+
+No number, unit, negation, or laterality was altered in any test case.
+
+### Validator
+
+`tests/test_protected_tokens.py` — **43 tests passing.**
+
+Rejects: dose change, negation removal, negation substitution
+(`does not report` → `denies`), laterality flip, frequency change, route
+change, added sentence, empty output, fabricated organism expansion.
+
+Permits: capitalisation, punctuation, route synonyms (`intravenously` → `IV`),
+spoken-number-to-digit rendering.
+
+Detection of mangled names, measured on both corpora:
+
+| Corpus | Flagged | True positives | False positives |
+|---|---|---|---|
+| Real voice | 3 | 3 | **0** |
+| Held-out | 9 | 9 | **0** |
+
+100 % precision, including on terminology never seen during development.
+
+### Acceptance criterion
+
+**Unsupported-content rate: 0 %** on both corpora — the Phase 6 gate.
+
+Important qualification: polishing is disabled (ADR 0001), so polished text
+*is* the raw transcript and this is zero by construction. True of the shipped
+configuration; not evidence that a polisher would pass.
+
+---
+
+## 3. Known limitations
+
+These are properties of the design, not defects to be fixed later, and they
+bound what this system can claim.
+
+### 3.1 ASR fabrication is inside the trusted baseline
+
+The validator compares polished text **against the raw transcript**. Anything
+the ASR invented is part of the reference and cannot be flagged as
+unsupported. Observed: `in the past medical history` → `in the past Michael
+Hex 3`.
+
+Mitigation is partial — the VAD gate removes the non-speech case, and the
+Phase 2 prompt reduced fabrication — but there is no detection for this class.
+**Human review of the raw transcript is the only defence.**
+
+### 3.2 A real word used wrongly is undetectable
+
+Membership testing catches non-words (`septipine`, `creptococcus`,
+`Urtapenem`). It cannot catch a plausible substitution of one real name for
+another. Observed: `Pneumocystis jirovecii` → `Pneumocystis cerevisiae`, where
+*cerevisiae* is a genuine organism.
+
+### 3.3 Named-entity accuracy is poor
+
+**62.5 %** medication-name accuracy on the real corpus. Roughly one
+distinctive drug or organism name in three is mis-transcribed. Every dictation
+containing drug names needs reading before use.
+
+### 3.4 The ASR prompt does not generalise
+
+Phase 2's gains were in-sample. On held-out terminology the prompt is worth
+one error in 356 words. It is a patch list for observed failures, not a
+general improvement.
+
+### 3.5 Sample sizes are small
+
+33 real and 39 synthetic utterances. Named-entity denominators are smaller
+still (8, 6, 19, 8), so those percentages carry wide uncertainty — 62.5 % is
+5 of 8. Both corpora are adversarial by construction and over-represent
+difficult terminology.
+
+### 3.6 Unmeasured
+
+- Bluetooth microphone input (expected worse than built-in).
+- Spontaneous speech with hesitation and self-correction; all testing used
+  read text.
+- Any polishing model in production use.
+- Specialty modes other than `infectious_diseases`.
+
+---
+
+## 4. What this build is and is not suitable for
+
+**Suitable:** reviewed dictation where the user reads every word before use —
+correspondence, note drafting, research writing.
+
+**Not suitable:** direct entry into a medical record without review;
+unattended or automated pasting; any workflow where a mis-transcribed drug
+name would not be caught by the person dictating.
+
+There is no paste-at-cursor path, by design.
+
+CLAUDE.md §6 Phase 8 directs starting with nonclinical email and research
+dictation, and not beginning with direct entry into a medical record. The
+evidence here supports that sequencing.
+
+---
+
+## 5. Reproducing this report
+
+```bash
+scripts/offline_smoke_test.sh                      # 16 privacy/offline checks
+.venv/bin/python -m pytest tests/ -q               # 43 validator tests
+scripts/benchmark.py runtime/tmp/corpus_prompted2 runtime/tmp/heldout_syn
+```
+
+The benchmark needs the recorded corpora under `runtime/`, which is gitignored
+and machine-local. `scripts/record_baseline.sh` regenerates the real-voice
+corpus; `scripts/make_synthetic_audio.sh` regenerates the synthetic ones.

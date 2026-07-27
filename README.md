@@ -24,7 +24,7 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 4 | Protected-token validator | Complete — [40/40 tests, 100% precision](docs/phase4-results.md) |
 | 5 | Desktop integration | Partial — VAD gate, review interface; no paste path |
 | 6 | Synthetic medical test suite | Complete — [gate passed](docs/phase6-results.md); named-entity accuracy 62.5% |
-| 7 | Offline and privacy verification | Not started |
+| 7 | Offline and privacy verification | Complete — [16/16 checks](docs/validation-report.md) |
 | 8 | Deployment | Not started |
 
 **Usable for reviewed, raw-transcript dictation; not for automatic pasting.**
@@ -95,6 +95,12 @@ Validate polished text against a raw transcript (deterministic, no model):
 ```bash
 scripts/validate_changes.py --raw raw.txt --polished polished.txt
 # exit 0 = safe_to_paste, 1 = review_required, 2 = rejected
+```
+
+Verify offline operation and privacy (16 empirical checks):
+
+```bash
+scripts/offline_smoke_test.sh
 ```
 
 Run the Phase 6 acceptance benchmark:
