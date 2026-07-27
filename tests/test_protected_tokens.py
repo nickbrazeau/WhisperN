@@ -252,3 +252,26 @@ def test_vad_gate_accepts_all_real_speech(pipeline):
         pytest.skip("real corpus not recorded")
     missed = [w.name for w in wavs if not pipeline.has_speech(w)]
     assert not missed, f"gate discarded real speech: {missed}"
+
+
+# ---------------------------------------------------------------- GUI invariant
+
+def test_gui_never_auto_pastes_unsafe_results():
+    """The GUI must not auto-paste review_required or rejected output.
+
+    CLAUDE.md §4.2: never auto-paste a review_required result in
+    clinical_strict. This is a source-level check because the behaviour is a
+    branch in the render path, and a refactor could silently move the paste
+    call outside the SAFE guard.
+    """
+    src = (REPO_ROOT / "scripts/whispern_app.py").read_text()
+
+    safe_branch = src.split("if result.outcome is Outcome.SAFE:")[1] \
+                     .split("# review_required")[0]
+    assert "self._paste" in safe_branch, "safe branch should offer paste"
+
+    review_branch = src.split("# review_required / rejected")[1].split("def ")[0]
+    assert "self._paste" not in review_branch, \
+        "review/rejected branch must never call _paste"
+    assert "self.root.after" not in review_branch, \
+        "review/rejected branch must not schedule a deferred paste"

@@ -63,6 +63,21 @@ not** — that is the point, and it is verified in §Offline below.
 
 ## Usage
 
+Desktop app — record, review, and paste:
+
+```bash
+scripts/whispern_app.py
+```
+
+Space to start/stop. Safe results paste at the cursor; anything needing review
+is shown and must be pasted deliberately.
+
+Terminal dictation:
+
+```bash
+scripts/dictate.py --copy
+```
+
 Transcribe an audio file. Any format macOS can decode; it is converted to
 16 kHz mono internally and the temporary audio is deleted on exit.
 
