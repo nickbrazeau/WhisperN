@@ -29,6 +29,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from integrations import audio as audio_devices  # noqa: E402
+from integrations import media  # noqa: E402
 from pipeline.dictation import DictationPipeline, Outcome  # noqa: E402
 from pipeline.polisher import LocalOnlyError, LocalPolisher  # noqa: E402
 from validation.validator import Validator  # noqa: E402
@@ -94,7 +96,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--file", type=Path, help="process an existing audio file")
-    ap.add_argument("--device", default="0", help="avfoundation input index")
+    ap.add_argument("--device", default=None,
+                    help="avfoundation input index; default resolves the "
+                         "microphone by name from config/app.yaml")
+    ap.add_argument("--list-devices", action="store_true",
+                    help="show the audio inputs and which one would be used")
+    ap.add_argument("--print-device-index", action="store_true",
+                    help="print only the chosen avfoundation index, for scripts")
     ap.add_argument("--mode", help="override polishing mode")
     ap.add_argument("--copy", action="store_true",
                     help="copy the result to the clipboard (explicit user action)")
@@ -107,6 +115,31 @@ def main() -> int:
     args = ap.parse_args()
 
     cfg = load_config(args.config)
+
+    if args.print_device_index:
+        chosen = audio_devices.resolve(
+            cfg.get("recording.prefer_microphone", "headset"))
+        if chosen is None:
+            return 1
+        print(chosen.index)
+        return 0
+
+    if args.list_devices:
+        prefer = cfg.get("recording.prefer_microphone", "headset")
+        devices = audio_devices.list_input_devices()
+        chosen = audio_devices.choose(devices, prefer)
+        if not devices:
+            print("no audio inputs found (is ffmpeg installed?)")
+            return 1
+        print(f"audio inputs (prefer_microphone: {prefer})\n")
+        for d in devices:
+            kind = "virtual" if d.is_virtual else ("built-in" if d.is_builtin
+                                                  else "external")
+            mark = "->" if chosen and d.index == chosen.index else "  "
+            note = "  SKIPPED: captures no microphone audio" if d.is_virtual else ""
+            print(f"  {mark} [{d.index}] {d.name:<32} {kind}{note}")
+        print(f"\nwould record from: {chosen or 'nothing usable'}")
+        return 0
     mode = args.mode or cfg.get("polishing.mode", "clinical_strict")
     polishing_on = cfg.get("polishing.enabled", "false").lower() == "true"
     model = cfg.get("polishing.model", "")
@@ -167,7 +200,29 @@ def main() -> int:
         import os
         os.close(fd)
         tmp_audio = audio = Path(name)
-        if not record_to(audio, args.device):
+
+        device = args.device
+        paused: list[str] = []
+        if device is None:
+            chosen = audio_devices.resolve(
+                cfg.get("recording.prefer_microphone", "headset"))
+            if chosen is None:
+                print("error: no usable microphone found; every avfoundation "
+                      "input is a virtual driver", file=sys.stderr)
+                audio.unlink(missing_ok=True)
+                return 3
+            device = str(chosen.index)
+            print(f"  microphone: {chosen.name}")
+
+        if cfg.get("recording.pause_music", "true").lower() == "true":
+            paused = media.pause_playing()
+        try:
+            ok = record_to(audio, device)
+        finally:
+            # Resume on every path, including Ctrl-C -- a failed take must not
+            # leave the user's music stopped.
+            media.resume(paused)
+        if not ok:
             audio.unlink(missing_ok=True)
             return 3
 

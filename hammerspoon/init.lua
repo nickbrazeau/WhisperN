@@ -26,9 +26,17 @@ local FFMPEG = "/opt/homebrew/bin/ffmpeg"
 
 -- avfoundation input index. NOT stable: indices renumber when a device
 -- connects or disconnects, which is how a Bluetooth headset silently changes
--- which microphone index 0 refers to. Verify with:
---   scripts/record_baseline.sh --list
-local AUDIO_DEVICE = "0"
+-- which microphone index 0 refers to. This was not hypothetical -- index 0 was
+-- the Microsoft Teams virtual driver, which captures digital silence.
+--
+-- So the index is never hardcoded. It is resolved by name through
+-- `dictate.py --print-device-index` (which reads recording.prefer_microphone
+-- from config/app.yaml), cached because resolving costs 0.24-1.03 s and must
+-- not sit between pressing FN and capturing speech, and re-resolved whenever
+-- macOS reports an audio device change.
+--
+-- Inspect with: scripts/dictate.py --list-devices
+local AUDIO_DEVICE = nil
 
 -- Minimum hold before a recording is treated as real, in seconds. A tap of the
 -- key produces a fragment of audio that Whisper will still try to transcribe.
@@ -122,10 +130,55 @@ local function process(path)
   end, { DICTATE, "--file", path, "--json", "--copy" }):start()
 end
 
+-- Resolve the microphone by name, off the hotkey path. Cached in
+-- AUDIO_DEVICE; callers must tolerate it still being nil.
+local function resolveDevice()
+  hs.task.new(PYTHON, function(code, stdout, _)
+    if code == 0 then
+      AUDIO_DEVICE = (stdout or ""):gsub("%s+", "")
+      if AUDIO_DEVICE == "" then AUDIO_DEVICE = nil end
+    end
+  end, { DICTATE, "--print-device-index" }):start()
+end
+
+-- Pause only players that are actually playing, and remember which, so resume
+-- never starts music the user had stopped themselves.
+local pausedPlayers = {}
+
+local function pauseMusic()
+  pausedPlayers = {}
+  if hs.spotify.isRunning() and hs.spotify.isPlaying() then
+    hs.spotify.pause()
+    table.insert(pausedPlayers, "spotify")
+  end
+  if hs.itunes.isRunning() and hs.itunes.isPlaying() then
+    hs.itunes.pause()
+    table.insert(pausedPlayers, "itunes")
+  end
+end
+
+local function resumeMusic()
+  for _, p in ipairs(pausedPlayers) do
+    if p == "spotify" then hs.spotify.play() else hs.itunes.play() end
+  end
+  pausedPlayers = {}
+end
+
 local function startRecording()
   if recording or busy then return end
+
+  if not AUDIO_DEVICE then
+    -- Refuse rather than fall back to index 0, which is how a silent virtual
+    -- driver got recorded in the first place.
+    resolveDevice()
+    hs.alert.show("No microphone resolved yet — try again", 1.5)
+    return
+  end
+
   recordPath = os.tmpname() .. ".wav"
   startedAt = hs.timer.secondsSinceEpoch()
+
+  pauseMusic()
 
   recording = hs.task.new(FFMPEG, nil, {
     "-nostdin", "-loglevel", "error", "-f", "avfoundation",
@@ -145,6 +198,10 @@ local function stopRecording()
   recording:interrupt()
   recording = nil
   hideIndicator()
+
+  -- Resume as soon as capture ends, on every path below, including the
+  -- too-short one: a discarded take must not leave music stopped.
+  resumeMusic()
 
   local path = recordPath
   recordPath = nil
@@ -179,6 +236,14 @@ M.fnWatcher = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function
 end)
 
 M.fnWatcher:start()
+
+-- Resolve the microphone now, and again whenever macOS reports an audio
+-- device change -- connecting a headset renumbers the avfoundation indices,
+-- which is the whole reason the index is not hardcoded.
+resolveDevice()
+M.audioWatcher = hs.audiodevice.watcher
+M.audioWatcher.setCallback(function() resolveDevice() end)
+M.audioWatcher.start()
 
 hs.alert.show("WhisperN ready — hold FN to dictate", 2)
 

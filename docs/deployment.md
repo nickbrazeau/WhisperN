@@ -266,6 +266,58 @@ delivered, and the window sampled `normal` on every tick — it is never
 hidden. `offline_smoke_test.sh` still passes 16/16 with the paste path in
 place, and the audit report contains no clinical terms.
 
+### 6.4 Microphone selection and music
+
+**The device is resolved by name, never by index.** avfoundation indices are
+positional and renumber whenever a device connects. Every entry point used to
+hardcode index `"0"`, and on this machine index 0 is the **Microsoft Teams
+virtual driver**, which captures digital silence:
+
+| idx | device | 2 s capture |
+|---|---|---|
+| 0 | Microsoft Teams Audio | `-91.0 dB` — digital zeros |
+| 1 | Bose QuietComfort 35 | `mean -28.8 dB` — real signal |
+| 2 | MacBook Pro Microphone | `-91.0 dB` while the headset held input |
+
+The Teams driver is listed even when Teams is not running, so this was not a
+transient. It fails safe rather than silently — the VAD gate returns "No
+speech detected" rather than letting Whisper invent text from silence — but
+every dictation would have been lost.
+
+Virtual drivers (Teams, Zoom, BlackHole, Loopback, Soundflower, OBS, Krisp,
+VB-Cable) are never selected. If every input is virtual, recording is refused
+rather than falling back to index 0.
+
+Inspect what would be used:
+
+```bash
+scripts/dictate.py --list-devices
+```
+
+`recording.prefer_microphone` in `config/app.yaml` chooses between `headset`
+(external mic wins) and `builtin`. The GUI shows the resolved device in the
+title bar, because the previous failure was invisible until a dictation came
+back empty.
+
+**Unmeasured caveat on `headset` with Bluetooth.** A Bluetooth headset
+negotiates its microphone over HFP at 16 kHz narrowband — a compressed voice
+codec, not a clean downsample — and drops out of A2DP while recording. It wins
+on proximity and room noise and loses on codec quality. Which effect dominates
+has **not** been measured against this corpus, and named-entity accuracy is
+already 62.5% (`docs/validation-report.md` §3.3). If drug names degrade after
+switching to a headset, try `prefer_microphone: builtin` before concluding
+anything about the model. Measuring it properly means recording the corpus on
+both and scoring with `scripts/score_transcripts.py`.
+
+**Music.** `recording.pause_music` pauses Spotify and Music.app while
+recording and resumes exactly those that were playing. It reads each player's
+state first, so it never starts music that was already stopped, and never
+launches a player that is not running. Resume runs on every exit path,
+including a failed or too-short take, so a discarded recording cannot leave
+music paused. Browser audio is deliberately not covered: it can only be
+nudged with a media key, which cannot be read back, so resume would be a
+guess.
+
 ---
 
 ## 7. Failure handling
@@ -276,6 +328,8 @@ Matches CLAUDE.md §9.
 |---|---|---|
 | Transcription fails | Error returned; no cloud attempt; temporary audio deleted | Retry once; check `scripts/record_baseline.sh --check` |
 | Transcription fails with `libwhisper.1.dylib (no such file)` | Error returned; no cloud attempt | The repo moved, or whisper.cpp was rebuilt, and the binaries' `LC_RPATH` is stale. Re-run the `install_name_tool` repair in `docs/environment.md` §3 |
+| Every dictation returns "No speech detected" | VAD gate rejects the audio; nothing transcribed | The selected input is probably a virtual driver capturing silence. Run `scripts/dictate.py --list-devices`; see §6.4 |
+| Music stays paused after a dictation | — | Should not happen; resume runs on every exit path. Report it, and resume manually |
 | VAD gate unavailable | **Fails open** — transcription proceeds with a warning | Confirm the VAD model is present; hallucination risk returns until fixed |
 | No speech detected | `No speech detected`, nothing emitted | Normal. Do not disable the gate to "fix" it without checking the audio |
 | Polishing unavailable | Raw transcript returned unchanged, marked unavailable | Nothing; polishing is disabled by default anyway |

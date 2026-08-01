@@ -52,6 +52,8 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from dictate import load_config  # noqa: E402
+from integrations import audio as audio_devices  # noqa: E402
+from integrations import media  # noqa: E402
 from pipeline.dictation import DictationPipeline, Outcome  # noqa: E402
 from pipeline.polisher import LocalOnlyError, LocalPolisher  # noqa: E402
 from validation.validator import Validator  # noqa: E402
@@ -231,8 +233,17 @@ class WhisperNApp:
         self.mode = cfg.get("polishing.mode", "clinical_strict")
         self.polishing_on = cfg.get("polishing.enabled", "false").lower() == "true"
         self.model = cfg.get("polishing.model", "")
-        self.device = "0"
+        self.prefer_mic = cfg.get("recording.prefer_microphone", "headset")
+        self.pause_music = cfg.get("recording.pause_music", "true").lower() == "true"
         self.auto_paste = tk.BooleanVar(value=True)
+
+        # Resolved by name, never cached as a bare index. Enumerating costs
+        # 0.24-1.03 s, too variable to sit in front of a recording without
+        # clipping speech onset, so it is resolved in the background and
+        # refreshed after each take.
+        self.device: audio_devices.InputDevice | None = None
+        self._paused_players: list[str] = []
+        threading.Thread(target=self._refresh_device, daemon=True).start()
 
         polisher = None
         if self.polishing_on and self.model and not self.model.startswith("REPLACE"):
@@ -296,6 +307,13 @@ class WhisperNApp:
         self.target_lbl = tk.Label(bar, text="", bg=PANEL, fg=MUTED, font=small)
         self.target_lbl.pack(side="right", padx=4)
         self._update_target_label()
+
+        # Which microphone is actually selected. Visible because the previous
+        # failure mode -- recording from a silent virtual driver -- was
+        # invisible until a dictation came back empty.
+        self.mic_lbl = tk.Label(bar, text="", bg=PANEL, fg=MUTED, font=small)
+        self.mic_lbl.pack(side="right", padx=4)
+        self._update_mic_label()
 
         # --- status -------------------------------------------------------
         self.status = tk.Label(r, text="Ready", bg=BG, fg=MUTED, font=ui)
@@ -367,6 +385,13 @@ class WhisperNApp:
             fg=MUTED if t else AMBER,
         )
 
+    def _update_mic_label(self) -> None:
+        d = self.device
+        self.mic_lbl.configure(
+            text=f"🎙 {d.name}" if d else "🎙 resolving…",
+            fg=MUTED if d else AMBER,
+        )
+
     def _show(self, chunks: list[tuple[str, str]]) -> None:
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
@@ -381,16 +406,47 @@ class WhisperNApp:
             return
         self.stop() if self.recording else self.start()
 
+    def _refresh_device(self) -> None:
+        """Re-resolve the microphone by name. Safe to call off the UI thread."""
+        self.device = audio_devices.resolve(self.prefer_mic)
+
+    def _resume_music(self) -> None:
+        """Resume exactly what we paused. Idempotent, so it is safe on every
+        exit path -- a take that fails must not leave music stopped."""
+        if self._paused_players:
+            media.resume(self._paused_players)
+            self._paused_players = []
+
     def start(self) -> None:
+        # Resolve now if the background pass has not landed yet. Recording
+        # against a stale or unknown index is what selected a silent virtual
+        # driver before.
+        if self.device is None:
+            self._refresh_device()
+        if self.device is None:
+            self.status.configure(text="No microphone", fg=RED)
+            self._show([
+                ("No usable microphone found.\n\n", "bad"),
+                ("Every avfoundation input is a virtual driver, or ffmpeg "
+                 "could not list devices. Nothing was recorded.\n", "dim"),
+            ])
+            return
+
         (REPO_ROOT / "runtime/tmp").mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(suffix=".wav", prefix="gui.",
                                     dir=REPO_ROOT / "runtime/tmp")
         os.close(fd)
         self.audio_path = Path(name)
 
+        # Before capture, not after: on a Bluetooth headset, opening the
+        # microphone drops the link out of A2DP anyway, and music playing into
+        # the first half-second of a recording is transcribable.
+        if self.pause_music:
+            self._paused_players = media.pause_playing()
+
         self.proc = subprocess.Popen(
             ["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "avfoundation",
-             "-i", f":{self.device}", "-ar", "16000", "-ac", "1",
+             "-i", f":{self.device.index}", "-ar", "16000", "-ac", "1",
              "-c:a", "pcm_s16le", "-y", str(self.audio_path)],
             stderr=subprocess.PIPE,
         )
@@ -399,6 +455,7 @@ class WhisperNApp:
             err = (self.proc.stderr.read() or b"").decode(errors="replace")
             self._show([("Recording failed to start.\n\n", "bad"), (err[-400:], "dim")])
             self.audio_path.unlink(missing_ok=True)
+            self._resume_music()   # never leave music paused on a failed take
             return
 
         self.recording = True
@@ -420,6 +477,12 @@ class WhisperNApp:
         self.proc = None
         self.recording = False
         self.busy = True
+
+        # Resume as soon as capture ends, not after transcription -- there is
+        # no reason to sit in silence while whisper runs.
+        self._resume_music()
+        # Devices may have changed while recording; refresh for the next take.
+        threading.Thread(target=self._refresh_device, daemon=True).start()
 
         self.button.configure(text="●  Record", bg=BLUE_BTN_DIM, state="disabled")
         self.status.configure(text="Transcribing…", fg=BLUE)
@@ -455,6 +518,7 @@ class WhisperNApp:
         except queue.Empty:
             pass
         self._update_target_label()
+        self._update_mic_label()
         self.root.after(80, self._drain)
 
     def _render(self, result) -> None:
@@ -587,6 +651,8 @@ def main() -> int:
         root.mainloop()
     finally:
         app.focus.stop()
+        # Quitting mid-recording must not leave music paused for good.
+        app._resume_music()
     return 0
 
 

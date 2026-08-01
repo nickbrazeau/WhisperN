@@ -4,6 +4,27 @@
 # src/pipeline/polisher.py refuses any non-loopback host, and refuses
 # hostnames outright because resolution can change.
 
+recording:
+  # Which microphone to record from. Resolved BY NAME at record time, never by
+  # a cached avfoundation index: indices are positional and renumber whenever a
+  # device connects. Hardcoding index 0 previously selected the Microsoft Teams
+  # virtual driver, which captures digital silence (-91 dB).
+  #
+  # headset: prefer an external mic (headset, USB) over the built-in one.
+  # builtin: the reverse.
+  #
+  # Caveat for `headset` with Bluetooth: the microphone is negotiated over HFP
+  # at 16 kHz narrowband, a compressed voice codec rather than a clean
+  # downsample, and it forces the headset out of A2DP while recording. It wins
+  # on proximity and room noise, and loses on codec quality. Unmeasured against
+  # this corpus -- see docs/deployment.md §6.4.
+  prefer_microphone: headset
+
+  # Pause Spotify and Music.app while recording, and resume exactly those that
+  # were playing. Never starts a player that was not already playing, and never
+  # launches one that is not running.
+  pause_music: true
+
 transcription:
   engine: whisper_cpp
   model: large-v3-turbo
