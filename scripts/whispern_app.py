@@ -65,6 +65,13 @@ AMBER   = "#d9a441"
 RED     = "#d15b5b"
 BLUE    = "#5b8fd1"
 
+# Record button. A shade deeper than BLUE so white text clears WCAG AA
+# (4.5:1); BLUE itself is too light to sit under white. Same hue family
+# (~215° against BLUE's ~214°), so it reads as the palette's blue rather than
+# a second one. DIM is that colour blended toward BG for the disabled state.
+BLUE_BTN     = "#4577bd"
+BLUE_BTN_DIM = "#2f476a"
+
 # How often to sample which application is frontmost. Each sample costs one
 # osascript process (~60-80 ms of subprocess, not of this thread). Lower is
 # fresher; higher is cheaper. 1 s keeps the target correct even if you switch
@@ -81,6 +88,40 @@ def _osa(script: str) -> subprocess.CompletedProcess:
 def _as_literal(s: str) -> str:
     """Escape a string for interpolation into an AppleScript literal."""
     return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+class EmbossedButton(tk.Label):
+    """A Label drawn as a raised button.
+
+    macOS Aqua ignores -bg on tk.Button and substitutes its own native
+    control, which is why the Record button rendered light grey while the code
+    asked for PANEL. A Label honours -bg and -relief, so the press and
+    disabled behaviour a Button would give for free are wired here instead.
+    """
+
+    def __init__(self, master, text: str, command, bg: str, **kw) -> None:
+        super().__init__(master, text=text, bg=bg, fg="#ffffff",
+                         relief="raised", bd=2, **kw)
+        self._command = command
+        self.bind("<Button-1>", self._on_press)
+        self.bind("<ButtonRelease-1>", self._on_release)
+
+    def _enabled(self) -> bool:
+        return str(self.cget("state")) != "disabled"
+
+    def _on_press(self, _evt) -> None:
+        if self._enabled():
+            self.configure(relief="sunken")
+
+    def _on_release(self, evt) -> None:
+        if not self._enabled():
+            return
+        self.configure(relief="raised")
+        # Fire only if released inside, as a real button does -- dragging off
+        # the widget is how you cancel a mis-click, and starting a recording
+        # by accident is worth guarding against.
+        if 0 <= evt.x < self.winfo_width() and 0 <= evt.y < self.winfo_height():
+            self._command()
 
 
 class FocusTracker:
@@ -260,11 +301,9 @@ class WhisperNApp:
         self.status = tk.Label(r, text="Ready", bg=BG, fg=MUTED, font=ui)
         self.status.pack(pady=(14, 6))
 
-        self.button = tk.Button(
-            r, text="●  Record", command=self.toggle,
-            bg=PANEL, fg=FG, font=ui, relief="flat", bd=0,
-            activebackground=BLUE, activeforeground="#ffffff",
-            highlightthickness=0, padx=26, pady=10,
+        self.button = EmbossedButton(
+            r, text="●  Record", command=self.toggle, bg=BLUE_BTN,
+            font=ui, disabledforeground=MUTED, padx=26, pady=10,
         )
         self.button.pack(pady=(0, 12))
 
@@ -382,7 +421,7 @@ class WhisperNApp:
         self.recording = False
         self.busy = True
 
-        self.button.configure(text="●  Record", bg=PANEL, state="disabled")
+        self.button.configure(text="●  Record", bg=BLUE_BTN_DIM, state="disabled")
         self.status.configure(text="Transcribing…", fg=BLUE)
         self._show([("Working…\n", "dim")])
 
@@ -410,7 +449,7 @@ class WhisperNApp:
                     self._render(payload)
                 else:
                     self.busy = False
-                    self.button.configure(state="normal")
+                    self.button.configure(state="normal", bg=BLUE_BTN)
                     self.status.configure(text="Error", fg=RED)
                     self._show([(str(payload), "bad")])
         except queue.Empty:
@@ -421,7 +460,7 @@ class WhisperNApp:
     def _render(self, result) -> None:
         self.busy = False
         self.result = result
-        self.button.configure(state="normal")
+        self.button.configure(state="normal", bg=BLUE_BTN)
 
         if result.outcome is Outcome.NO_SPEECH:
             self.status.configure(text="No speech detected", fg=AMBER)
