@@ -234,6 +234,7 @@ Matches CLAUDE.md §9.
 | Failure | Behaviour | What to do |
 |---|---|---|
 | Transcription fails | Error returned; no cloud attempt; temporary audio deleted | Retry once; check `scripts/record_baseline.sh --check` |
+| Transcription fails with `libwhisper.1.dylib (no such file)` | Error returned; no cloud attempt | The repo moved, or whisper.cpp was rebuilt, and the binaries' `LC_RPATH` is stale. Re-run the `install_name_tool` repair in `docs/environment.md` §3 |
 | VAD gate unavailable | **Fails open** — transcription proceeds with a warning | Confirm the VAD model is present; hallucination risk returns until fixed |
 | No speech detected | `No speech detected`, nothing emitted | Normal. Do not disable the gate to "fix" it without checking the audio |
 | Polishing unavailable | Raw transcript returned unchanged, marked unavailable | Nothing; polishing is disabled by default anyway |

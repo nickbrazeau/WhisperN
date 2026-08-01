@@ -70,7 +70,7 @@ The Bluetooth headset is currently the **default input device**.
 | node | Installed | v24.8.0 |
 | ollama | Installed | 0.31.1 |
 | cmake | Installed (this phase) | 4.4.0 |
-| whisper-cli | Built (this phase) | `whisper.cpp/build/bin/whisper-cli`, ggml 0.16.0 |
+| whisper-cli | Built; **rpath repaired** | `whisper.cpp/build/bin/whisper-cli`, ggml 0.16.0 — see below |
 | ffmpeg | **Repaired** (this phase) | 8.1.2_1 — see below |
 | sox | Not installed | not needed |
 
@@ -97,6 +97,47 @@ which performs the same 16 kHz mono conversion, and whisper.cpp bundles
 deliberately, so the pipeline has one fewer external dependency and cannot be
 broken again by a Homebrew version skew. The repaired ffmpeg is a convenience
 for other work, not a requirement here.
+
+### whisper.cpp binaries had a hardcoded rpath; now relocatable
+
+The repo was originally at `~/Documents/Github/WhisperN` and later moved to
+`~/AgentWorkspaces/WhisperN`. CMake had baked that **original absolute path**
+into every built binary as its `LC_RPATH`, so after the move dyld looked for
+the libraries only in a directory that no longer existed:
+
+```
+transcription failed: '/Users/.../Documents/Github/WhisperN/whisper.cpp/build/bin/libwhisper.1.dylib'
+  (no such file)
+```
+
+Nothing was missing. `libwhisper.1.dylib` and the `libggml-*` family were
+sitting beside the binary the whole time; the binary simply had a stale
+forwarding address. (The `/System/Volumes/Preboot/Cryptexes/OS/...` variants in
+the error are macOS retrying the same bad path, not a second fault.)
+
+Repaired by rewriting the rpath on all **20** Mach-O files in
+`whisper.cpp/build/bin` to `@loader_path`, which resolves relative to the
+binary and therefore survives any future move:
+
+```bash
+cd whisper.cpp/build/bin
+OLD=/Users/<user>/Documents/Github/WhisperN/whisper.cpp/build/bin
+for f in *; do
+  [ -L "$f" ] && continue; [ -f "$f" ] || continue
+  otool -l "$f" | grep -q "$OLD" || continue
+  install_name_tool -rpath "$OLD" "@loader_path" "$f"
+  codesign -f -s - "$f"          # editing a Mach-O invalidates its signature
+done
+```
+
+The ad-hoc `codesign` step is not optional: without it the modified binaries
+are killed on launch.
+
+**This repair does not survive a rebuild.** `cmake --build` regenerates the
+binaries with a fresh absolute `LC_RPATH` pointing at wherever the repo sits at
+build time. If you rebuild whisper.cpp, or move the repo and rebuild, re-run
+the loop above. Verified after repair: `codesign -v whisper-cli` passes and
+`samples/jfk.wav` transcribes correctly with `ggml-large-v3-turbo.bin`.
 
 ### Python environment note
 
