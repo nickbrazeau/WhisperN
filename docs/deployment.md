@@ -16,8 +16,12 @@ A **raw-transcript dictation pipeline with review**. Polishing is disabled
 microphone → VAD gate → whisper.cpp → normalize → validate → review
 ```
 
-There is **no paste-at-cursor path**. Output is displayed, and optionally
-copied to the clipboard as an explicit user action.
+Two front ends, with different paste behaviour:
+
+- `scripts/dictate.py` and the FN-hold Hammerspoon hotkey — **clipboard only**,
+  never paste.
+- `scripts/whispern_app.py` (desktop GUI) — pastes at the cursor, but only
+  `safe_to_paste` results and only when auto-paste is ticked. See §6.3.
 
 ---
 
@@ -217,13 +221,46 @@ negation, dose, units, or laterality, human approval, and a rollback entry.
 spoken, and a different cephalosporin misheard the same way would be silently
 replaced with the wrong drug.
 
-### 6.3 Adding a paste path
+### 6.3 The paste path
 
-Not implemented, deliberately. CLAUDE.md §11 says not to skip to automatic
-pasting. Before building one, note that pasting `safe_to_paste` output would
-still paste text containing a mis-transcribed drug name roughly one time in
-three, because the validator cannot detect a *real* word used wrongly
-(`docs/validation-report.md` §3.2).
+Implemented in the desktop GUI only (`scripts/whispern_app.py`). The FN-hold
+Hammerspoon path remains clipboard-only and does not paste.
+
+**What it will paste.** `safe_to_paste` results, and only when the
+"Auto-paste safe results" box is ticked. `review_required` and `rejected` are
+never pasted automatically under any setting; pasting those takes a second,
+deliberate click after reading. This is enforced by a source-level test
+(`test_gui_never_auto_pastes_unsafe_results`) because the guarantee is a
+branch that a refactor could silently move.
+
+**The standing caveat.** "Safe" means no protected token changed. It does not
+mean the words are right: pasted `safe_to_paste` output still contains a
+mis-transcribed drug or organism name roughly one time in three, because the
+validator cannot detect a *real* word used wrongly
+(`docs/validation-report.md` §3.2). Read what you paste.
+
+**Where it pastes.** ⌘V goes to whatever macOS considers frontmost, so the app
+samples which application was frontmost before it took focus, activates that
+app explicitly, confirms it really is frontmost, and only then sends the
+keystroke. The target is shown in the title bar (`→ Notes`).
+
+It **fails closed**: no known target, the target having quit, or any other app
+being frontmost at the instant of the keystroke means nothing is typed
+anywhere and the text is left on the clipboard. That asymmetry is deliberate —
+a transcript pasted into the wrong window is worse than one not pasted, and
+during development a best-effort implementation did exactly that, typing test
+markers into a terminal.
+
+**Do not "fix" this by hiding the window.** An earlier implementation called
+`withdraw()` to yield focus. macOS does not transfer frontmost status that
+way: the keystroke reached the hidden window and was discarded, 0/9 at delays
+from 250 ms to 1200 ms, while `osascript` still exited 0 so the UI reported a
+green "Pasted" for a paste that never happened. Because the text is copied
+first, a manual ⌘V made it look like it worked. Guarded by
+`test_gui_paste_does_not_hide_the_window`.
+
+**Measured** (2026-07-31, 10 trials pinned to TextEdit): 10/10 delivered,
+0 misdirected, ~380 ms per paste, window never hidden.
 
 ---
 

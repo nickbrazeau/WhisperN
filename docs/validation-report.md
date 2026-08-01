@@ -4,7 +4,7 @@ Consolidated validation evidence for the local medical dictation pipeline.
 CLAUDE.md §11 deliverable 12. Covers Phase 7 (offline and privacy
 verification) and summarises the evidence from Phases 1–6.
 
-Last updated: 2026-07-27.
+Last updated: 2026-07-31.
 
 ---
 
@@ -81,7 +81,7 @@ No number, unit, negation, or laterality was altered in any test case.
 
 ### Validator
 
-`tests/test_protected_tokens.py` — **43 tests passing.**
+`tests/test_protected_tokens.py` — **48 tests passing.**
 
 Rejects: dose change, negation removal, negation substitution
 (`does not report` → `denies`), laterality flip, frequency change, route
@@ -170,7 +170,12 @@ correspondence, note drafting, research writing.
 unattended or automated pasting; any workflow where a mis-transcribed drug
 name would not be caught by the person dictating.
 
-There is no paste-at-cursor path, by design.
+A paste-at-cursor path exists in the desktop GUI (`scripts/whispern_app.py`)
+and is **off for everything except `safe_to_paste`**. `review_required` and
+`rejected` are never pasted automatically under any setting. This does not
+change the judgement above: "safe" means no protected token changed, not that
+every word is right, so the one-in-three named-entity caveat still applies to
+anything pasted. See `docs/deployment.md` §6.3.
 
 CLAUDE.md §6 Phase 8 directs starting with nonclinical email and research
 dictation, and not beginning with direct entry into a medical record. The
@@ -182,7 +187,7 @@ evidence here supports that sequencing.
 
 ```bash
 scripts/offline_smoke_test.sh                      # 16 privacy/offline checks
-.venv/bin/python -m pytest tests/ -q               # 43 validator tests
+.venv/bin/python -m pytest tests/ -q               # 48 validator + GUI-invariant tests
 scripts/benchmark.py runtime/tmp/corpus_prompted2 runtime/tmp/heldout_syn
 ```
 
