@@ -260,7 +260,11 @@ first, a manual ⌘V made it look like it worked. Guarded by
 `test_gui_paste_does_not_hide_the_window`.
 
 **Measured** (2026-07-31, 10 trials pinned to TextEdit): 10/10 delivered,
-0 misdirected, ~380 ms per paste, window never hidden.
+0 misdirected, ~380 ms per paste. Separately verified through the real
+`WhisperNApp._render` auto-paste path: status `Pasted → TextEdit`, text
+delivered, and the window sampled `normal` on every tick — it is never
+hidden. `offline_smoke_test.sh` still passes 16/16 with the paste path in
+place, and the audit report contains no clinical terms.
 
 ---
 
