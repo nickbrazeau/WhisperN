@@ -14,7 +14,7 @@ This shell is intentionally thin: it starts and stops a recording and calls
 
 ```bash
 mkdir -p ~/.hammerspoon
-ln -sf ~/Documents/Github/WhisperN/hammerspoon/init.lua ~/.hammerspoon/init.lua
+ln -sf ~/AgentWorkspaces/WhisperN/hammerspoon/init.lua ~/.hammerspoon/init.lua
 ```
 
 A symlink, so edits in the repo take effect on reload.
@@ -85,7 +85,7 @@ Edit `init.lua`:
 |---|---|---|
 | `AUDIO_DEVICE` | `"0"` | avfoundation index. **Not stable** — renumbers when devices connect. Check with `scripts/record_baseline.sh --list` |
 | `MIN_HOLD` | `0.35` | Below this, the recording is discarded as a key tap |
-| `REPO` | `~/Documents/Github/WhisperN` | Change if the repo moves |
+| `REPO` | `~/AgentWorkspaces/WhisperN` | Change if the repo moves |
 
 ---
 

@@ -19,7 +19,7 @@ local M = {}
 
 -- ---------------------------------------------------------------- config
 
-local REPO = os.getenv("HOME") .. "/Documents/Github/WhisperN"
+local REPO = os.getenv("HOME") .. "/AgentWorkspaces/WhisperN"
 local PYTHON = REPO .. "/.venv/bin/python"
 local DICTATE = REPO .. "/scripts/dictate.py"
 local FFMPEG = "/opt/homebrew/bin/ffmpeg"
