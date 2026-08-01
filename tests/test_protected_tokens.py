@@ -275,3 +275,83 @@ def test_gui_never_auto_pastes_unsafe_results():
         "review/rejected branch must never call _paste"
     assert "self.root.after" not in review_branch, \
         "review/rejected branch must not schedule a deferred paste"
+
+
+def _paste_body() -> str:
+    """Source of _paste with its docstring removed.
+
+    The docstring names withdraw() to explain why it must not be used, so the
+    guards below have to read the code rather than the prose.
+    """
+    src = (REPO_ROOT / "scripts/whispern_app.py").read_text()
+    fn = src.split("def _paste(")[1].split("\n    def ")[0]
+    parts = fn.split('"""')
+    return parts[2] if len(parts) >= 3 else fn
+
+
+def test_gui_paste_does_not_hide_the_window():
+    """_paste must not go back to yielding focus by hiding the window.
+
+    withdraw() does not transfer frontmost status, so the keystroke was
+    delivered to our own hidden window and discarded -- measured 0/9 at sleeps
+    from 250 ms to 1200 ms, while osascript still exited 0 and the UI showed a
+    green "Pasted". A refactor reaching for withdraw() again would silently
+    reintroduce a paste that reports success and does nothing.
+    """
+    body = _paste_body()
+    for banned in ("withdraw(", "deiconify("):
+        assert banned not in body, f"_paste must not call {banned}"
+
+
+def test_gui_paste_fails_closed_without_a_known_target():
+    """No target means no keystroke.
+
+    ⌘V is delivered to whatever is frontmost. Sending it without knowing where
+    it will land is how clinical text reaches the wrong window; during
+    development exactly this pasted test markers into a terminal. The guard
+    must come before paste_into() and must return.
+    """
+    body = _paste_body()
+
+    guard = body.index("if not target:")
+    call = body.index("paste_into(")
+    assert guard < call, "the no-target guard must precede paste_into()"
+    assert "return" in body[guard:call], "the no-target guard must return"
+
+
+def test_focus_tracker_never_targets_itself():
+    """Our own process must never become the paste target.
+
+    If it did, activating the 'target' would focus this window and ⌘V would
+    type the transcript into the app's own result box.
+    """
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from whispern_app import FocusTracker
+
+    t = FocusTracker(self_name="python3")
+    assert t.target is None
+
+    t.consider("python3")
+    assert t.target is None, "must not target our own process"
+    t.consider("")
+    assert t.target is None, "must not target an empty name"
+    t.consider(None)
+    assert t.target is None, "must not target a missing name"
+
+    t.consider("Notes")
+    assert t.target == "Notes"
+    t.consider("python3")
+    assert t.target == "Notes", "our own process must not clear a good target"
+
+
+def test_applescript_literals_are_escaped():
+    """An application name is interpolated into an AppleScript literal.
+
+    Names containing a quote or backslash would otherwise break out of the
+    string and change what the script does.
+    """
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from whispern_app import _as_literal
+
+    assert _as_literal('Fo"o') == 'Fo\\"o'
+    assert _as_literal("Fo\\o") == "Fo\\\\o"

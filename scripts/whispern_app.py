@@ -23,12 +23,20 @@ Pasting synthesises ⌘V, which requires Accessibility permission for whatever
 process runs this. The app detects that and says so rather than failing
 silently.
 
+⌘V goes wherever macOS thinks the front application is, so the app tracks
+which application you came from and activates it explicitly before typing.
+That target is shown in the title bar. If it is unknown, or if the app is not
+actually frontmost when the keystroke is about to be sent, nothing is typed
+anywhere and the text is left on the clipboard -- misdirecting clinical text
+into the wrong window is worse than not pasting at all.
+
 Usage:
   scripts/whispern_app.py
 """
 
 from __future__ import annotations
 
+import os
 import queue
 import subprocess
 import sys
@@ -56,6 +64,116 @@ GREEN   = "#4caf7d"
 AMBER   = "#d9a441"
 RED     = "#d15b5b"
 BLUE    = "#5b8fd1"
+
+# How often to sample which application is frontmost. Each sample costs one
+# osascript process (~60-80 ms of subprocess, not of this thread). Lower is
+# fresher; higher is cheaper. 1 s keeps the target correct even if you switch
+# apps immediately before recording.
+POLL_SECONDS = 1.0
+
+_FRONTMOST = 'tell application "System Events" to get name of first process whose frontmost is true'
+
+
+def _osa(script: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["osascript", "-e", script], capture_output=True)
+
+
+def _as_literal(s: str) -> str:
+    """Escape a string for interpolation into an AppleScript literal."""
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+class FocusTracker:
+    """Remembers the last application that was frontmost other than this one.
+
+    ⌘V is delivered to whatever macOS considers frontmost, so pasting at the
+    cursor requires knowing which application the user came from. macOS offers
+    no way to ask for "the previous app": System Events reports only the
+    current frontmost process, and its process list is not in front-to-back
+    order (verified: our own process appeared second-to-last while frontmost).
+    So the answer has to be sampled before we take focus.
+
+    PRIVACY (CLAUDE.md §3.1): this records application *names* only -- never a
+    window title, document name, or any content. In memory only. Never
+    logged, never written to disk, never placed in the audit trail. It is
+    discarded when the app exits.
+    """
+
+    def __init__(self, poll_seconds: float = POLL_SECONDS,
+                 self_name: str | None = None) -> None:
+        self.poll_seconds = poll_seconds
+        self._target: str | None = None
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        if self_name is None:
+            # Identify ourselves by PID, not by guessing "python" vs
+            # "python3" -- both appear in a normal process list.
+            r = _osa('tell application "System Events" to get name of first '
+                     f'process whose unix id is {os.getpid()}')
+            self_name = r.stdout.decode(errors="replace").strip()
+        self.self_name = self_name or "python"
+
+    @property
+    def target(self) -> str | None:
+        return self._target
+
+    def consider(self, name: str | None) -> None:
+        """Record `name` as the paste target unless it is us or empty.
+
+        Split out from the poll loop so it can be tested without a GUI.
+        """
+        if name and name != self.self_name:
+            self._target = name
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            r = _osa(_FRONTMOST)
+            if r.returncode == 0:
+                self.consider(r.stdout.decode(errors="replace").strip())
+            self._stop.wait(self.poll_seconds)
+
+
+def paste_into(process_name: str) -> tuple[str, str]:
+    """Activate `process_name`, confirm it really is frontmost, then send ⌘V.
+
+    Activation and verification happen inside a single osascript so nothing can
+    steal focus between the two, and so the whole handoff costs one process
+    rather than three.
+
+    The verification is the safety property, not a nicety. Without it a stale
+    or wrong target sends clinical text into whatever happens to be frontmost
+    -- during development this pasted test markers into a terminal. Returns
+    ("pasted"|"abort"|"error", detail).
+    """
+    lit = _as_literal(process_name)
+    script = f'''
+    tell application "System Events"
+      set procs to every process whose name is "{lit}"
+      if (count of procs) = 0 then return "abort:gone"
+      set frontmost of item 1 of procs to true
+      delay 0.08
+      set f to name of first process whose frontmost is true
+      if f is not "{lit}" then return "abort:" & f
+      keystroke "v" using command down
+      return "pasted"
+    end tell
+    '''
+    r = _osa(script)
+    if r.returncode != 0:
+        return "error", r.stderr.decode(errors="replace").strip()
+    out = r.stdout.decode(errors="replace").strip()
+    if out == "pasted":
+        return "pasted", process_name
+    if out.startswith("abort:"):
+        return "abort", out[len("abort:"):]
+    return "error", out or "no result"
 
 
 class WhisperNApp:
@@ -95,6 +213,10 @@ class WhisperNApp:
             mode=self.mode,
         )
 
+        # Must exist before _build_ui, which renders the current target.
+        self.focus = FocusTracker()
+        self.focus.start()
+
         self._build_ui()
         self.root.after(80, self._drain)
 
@@ -127,6 +249,12 @@ class WhisperNApp:
         self.paste_lbl = tk.Label(bar, text="", bg=PANEL, fg=MUTED, font=small)
         self.paste_lbl.pack(side="right", padx=10)
         self._update_paste_label()
+
+        # Where a paste would land. Visible before recording, so a wrong or
+        # missing target is caught before any text exists to misdirect.
+        self.target_lbl = tk.Label(bar, text="", bg=PANEL, fg=MUTED, font=small)
+        self.target_lbl.pack(side="right", padx=4)
+        self._update_target_label()
 
         # --- status -------------------------------------------------------
         self.status = tk.Label(r, text="Ready", bg=BG, fg=MUTED, font=ui)
@@ -193,6 +321,13 @@ class WhisperNApp:
             fg=AMBER if on else GREEN,
         )
 
+    def _update_target_label(self) -> None:
+        t = self.focus.target
+        self.target_lbl.configure(
+            text=f"→ {t}" if t else "→ no target",
+            fg=MUTED if t else AMBER,
+        )
+
     def _show(self, chunks: list[tuple[str, str]]) -> None:
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
@@ -211,7 +346,6 @@ class WhisperNApp:
         (REPO_ROOT / "runtime/tmp").mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(suffix=".wav", prefix="gui.",
                                     dir=REPO_ROOT / "runtime/tmp")
-        import os
         os.close(fd)
         self.audio_path = Path(name)
 
@@ -281,6 +415,7 @@ class WhisperNApp:
                     self._show([(str(payload), "bad")])
         except queue.Empty:
             pass
+        self._update_target_label()
         self.root.after(80, self._drain)
 
     def _render(self, result) -> None:
@@ -351,45 +486,68 @@ class WhisperNApp:
             self._paste(self.result.text_to_use)
 
     def _paste(self, text: str) -> None:
-        """Copy, yield focus, then synthesise ⌘V.
+        """Copy, then send ⌘V to the application the user came from.
 
-        Hiding the window is what makes this work: macOS returns focus to the
-        previously active application, so the keystroke lands where the user
-        was typing rather than in this window.
+        The window is NOT hidden. A previous implementation called withdraw()
+        to yield focus, on the theory that macOS would hand frontmost status
+        back to the previous app. It does not: measured 0/9 delivery at sleeps
+        from 250 ms to 1200 ms, because the keystroke went to our own hidden
+        window and was discarded. osascript still exited 0, so the UI reported
+        a green "Pasted" for a paste that never happened. Activating the
+        target explicitly is what actually delivers, and it removes the
+        window-blink at the same time.
+
+        The text is always on the clipboard first, so every failure path below
+        still leaves the user a working ⌘V.
         """
         self._copy(text)
-        self.root.withdraw()
-        self.root.update()
-        time.sleep(0.25)
 
-        r = subprocess.run(
-            ["osascript", "-e",
-             'tell application "System Events" to keystroke "v" using command down'],
-            capture_output=True,
-        )
-        self.root.deiconify()
+        target = self.focus.target
+        if not target:
+            # Fail closed. Sending ⌘V to an unknown frontmost app is how
+            # clinical text ends up in the wrong window.
+            self.status.configure(text="Not pasted — no target app", fg=AMBER)
+            self._show([
+                (text + "\n\n", ""),
+                ("Not pasted: no target application known yet.\n", "warn"),
+                ("Click into the app you want this in, then press Paste.\n"
+                 "The text is on the clipboard; ⌘V works.\n", "dim"),
+            ])
+            return
 
-        if r.returncode != 0:
-            err = r.stderr.decode(errors="replace")
-            if "not allowed" in err or "1002" in err:
-                self.status.configure(text="Paste blocked — grant Accessibility", fg=RED)
-                self._show([
-                    (text + "\n\n", ""),
-                    ("Pasting needs Accessibility permission.\n", "bad"),
-                    ("System Settings → Privacy & Security → Accessibility, "
-                     "then add whatever runs this app (Terminal, or Python).\n\n", "dim"),
-                    ("The text is on the clipboard; ⌘V works.\n", "dim"),
-                ])
-            else:
-                self.status.configure(text="Paste failed", fg=RED)
+        status, detail = paste_into(target)
+
+        if status == "pasted":
+            self.status.configure(text=f"Pasted → {target}", fg=GREEN)
+        elif status == "abort":
+            where = "it quit" if detail == "gone" else f"focus was {detail}"
+            self.status.configure(text=f"Not pasted — {where}", fg=AMBER)
+            self._show([
+                (text + "\n\n", ""),
+                (f"Not pasted: expected {target} to be frontmost but {where}.\n", "warn"),
+                ("Nothing was typed anywhere. The text is on the clipboard; "
+                 "⌘V works.\n", "dim"),
+            ])
+        elif "not allowed" in detail or "1002" in detail:
+            self.status.configure(text="Paste blocked — grant Accessibility", fg=RED)
+            self._show([
+                (text + "\n\n", ""),
+                ("Pasting needs Accessibility permission.\n", "bad"),
+                ("System Settings → Privacy & Security → Accessibility, "
+                 "then add whatever runs this app (Terminal, or Python).\n\n", "dim"),
+                ("The text is on the clipboard; ⌘V works.\n", "dim"),
+            ])
         else:
-            self.status.configure(text="Pasted", fg=GREEN)
+            self.status.configure(text="Paste failed", fg=RED)
 
 
 def main() -> int:
     root = tk.Tk()
-    WhisperNApp(root)
-    root.mainloop()
+    app = WhisperNApp(root)
+    try:
+        root.mainloop()
+    finally:
+        app.focus.stop()
     return 0
 
 
