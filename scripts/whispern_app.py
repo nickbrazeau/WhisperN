@@ -23,6 +23,11 @@ Pasting synthesises ⌘V, which requires Accessibility permission for whatever
 process runs this. The app detects that and says so rather than failing
 silently.
 
+Prefer launching through the bundle built by `scripts/build_app.sh`: macOS
+attributes privacy grants to the application, so running this from a terminal
+grants Microphone, Accessibility, and Automation to that terminal and to every
+command anyone ever runs in it. The bundle owns those grants alone.
+
 ⌘V goes wherever macOS thinks the front application is, so the app tracks
 which application you came from and activates it explicitly before typing.
 That target is shown in the title bar. If it is unknown, or if the app is not
@@ -636,8 +641,9 @@ class WhisperNApp:
             self._show([
                 (text + "\n\n", ""),
                 ("Pasting needs Accessibility permission.\n", "bad"),
-                ("System Settings → Privacy & Security → Accessibility, "
-                 "then add whatever runs this app (Terminal, or Python).\n\n", "dim"),
+                ("System Settings → Privacy & Security → Accessibility, then "
+                 "add WhisperN — or, if you launched this from a terminal, "
+                 "that terminal.\n\n", "dim"),
                 ("The text is on the clipboard; ⌘V works.\n", "dim"),
             ])
         else:

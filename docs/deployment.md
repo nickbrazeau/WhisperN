@@ -25,8 +25,13 @@ Three front ends:
   `review_required` and `rejected` open an **editable** dialog needing an
   explicit click. `AUTO_PASTE = false` in `init.lua` reverts it to
   clipboard-only.
-- `scripts/whispern_app.py` (desktop GUI) — pastes at the cursor, only
-  `safe_to_paste`, only when auto-paste is ticked. See §6.3.
+- `WhisperN.app` / `scripts/whispern_app.py` (desktop GUI) — pastes at the
+  cursor, only `safe_to_paste`, only when auto-paste is ticked. See §6.3.
+
+The bundle is built by `scripts/build_app.sh`; it is a launcher that runs the
+Python from the repo, so it must be rebuilt if the repo moves. Privacy grants
+(Microphone, Accessibility, Automation) attach to `WhisperN.app` rather than to
+a terminal.
 
 **Verifying the hotkey is live.** Hammerspoon logs nothing externally, so
 `init.lua` writes `runtime/tmp/hammerspoon-status.txt` on load, carrying the

@@ -67,11 +67,25 @@ not** — that is the point, and it is verified in §Offline below.
 
 ## Usage
 
-Desktop app — record, review, and paste:
+Desktop app — record, review, and paste. Build it once as a real macOS
+application and launch it from the Dock:
+
+```bash
+scripts/build_app.sh --install     # → /Applications/WhisperN.app
+```
+
+Or run it from a terminal:
 
 ```bash
 scripts/whispern_app.py
 ```
+
+**Prefer the bundle.** macOS attributes privacy grants to the application, so
+running the GUI from a terminal grants Microphone, Accessibility, and
+Automation to that terminal — and therefore to every command anyone ever runs
+in it. `WhisperN.app` owns those grants alone. The bundle is a launcher, not a
+copy: it runs the Python out of this repo, so edits take effect on the next
+launch. Rebuild after moving the repo, because the launcher hardcodes its path.
 
 Space to start/stop. Safe results paste at the cursor; anything needing review
 is shown and must be pasted deliberately.

@@ -25,6 +25,10 @@ models/
 whisper.cpp/
 build/
 
+# Built application bundle. Reproduced by scripts/build_app.sh, and it hardcodes
+# an absolute repo path, so it is machine-specific and must not be committed.
+dist/
+
 # Python
 .venv/
 __pycache__/
