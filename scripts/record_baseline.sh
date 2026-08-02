@@ -11,8 +11,13 @@
 # under runtime/ which is gitignored -- do not move these files into the repo,
 # and do not dictate patient information into them.
 #
+# Resumes by default: a phrase whose .wav already exists is skipped, so a
+# hundred-phrase session can be done over several sittings. Pass --restart to
+# re-record from the beginning, which overwrites.
+#
 # Usage:
 #   scripts/record_baseline.sh <phrases.txt> <output_dir> [device]
+#   scripts/record_baseline.sh <phrases.txt> <output_dir> --restart
 #   scripts/record_baseline.sh --check [device]      # validate mic, no recording
 #   scripts/record_baseline.sh --list                # list input devices
 #
@@ -178,8 +183,17 @@ esac
 
 # --------------------------------------------------------------------- setup
 
-PHRASES="${1:?usage: record_baseline.sh <phrases.txt> <output_dir> [device]}"
-OUTDIR="${2:?usage: record_baseline.sh <phrases.txt> <output_dir> [device]}"
+# --restart may appear anywhere; strip it before the positional arguments are
+# read, so the existing three-argument form is untouched.
+RESTART=0
+ARGS=()
+for a in "$@"; do
+    if [ "$a" = "--restart" ]; then RESTART=1; else ARGS+=("$a"); fi
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+
+PHRASES="${1:?usage: record_baseline.sh <phrases.txt> <output_dir> [device] [--restart]}"
+OUTDIR="${2:?usage: record_baseline.sh <phrases.txt> <output_dir> [device] [--restart]}"
 DEVICE_WANT="${3:-$DEFAULT_DEVICE_NAME}"
 
 command -v ffmpeg >/dev/null || die "ffmpeg not found"
@@ -255,6 +269,7 @@ BANNER
 
 recorded=0
 skipped=0
+already=0
 i=0
 errlog="$OUTDIR/.ffmpeg.err"
 
@@ -262,6 +277,15 @@ for line in "${phrases[@]}"; do
     i=$((i + 1))
     id=$(printf "%03d" "$i")
     wav="$OUTDIR/phrase_${id}.wav"
+
+    # Resume by default. A hundred phrases is more than one sitting, and the
+    # old behaviour -- always restart at 001 and overwrite -- silently destroyed
+    # finished work when the session was picked up again. Skipping is the safe
+    # default; --restart is the way to say you meant it.
+    if [ "$RESTART" -eq 0 ] && [ -s "$wav" ]; then
+        already=$((already + 1))
+        continue
+    fi
 
     while true; do
         echo
@@ -345,7 +369,7 @@ rm -f "$errlog"
 
 echo
 echo "--------------------------------------------------------------------"
-echo "  recorded: $recorded    skipped: $skipped"
+echo "  recorded: $recorded    skipped: $skipped    already done: $already"
 echo "  output:   $OUTDIR"
 echo
 echo "  Next:"

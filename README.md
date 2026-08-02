@@ -102,6 +102,35 @@ With no anchor, text pastes into the application that was frontmost when
 recording started — and only if it still is, otherwise the paste is blocked and
 the text is left on the clipboard.
 
+### Measuring named-entity accuracy
+
+The headline risk number — 62.5% medication-name accuracy — is five correct
+observations out of eight, a 95% interval of **31% to 86%**. It cannot
+distinguish a tool that mangles most drug names from one that gets six in seven
+right. To widen the denominator:
+
+```bash
+scripts/build_phrase_bank.py --count 100 --out runtime/tmp/bank
+scripts/record_baseline.sh runtime/tmp/bank/phrases.txt runtime/tmp/bank
+scripts/transcribe_all.sh runtime/tmp/bank
+scripts/score_phrase_bank.py runtime/tmp/bank      # per-term, with intervals
+scripts/benchmark.py runtime/tmp/bank              # standard Phase 6 metrics
+```
+
+100 phrases yield roughly 60 drug and 50 organism observations, tightening the
+interval from ±28 to ±12 points. Recording resumes by default, so it can be
+done across several sittings; `--restart` re-records from the beginning.
+
+Phrases are built from [`config/corpus_terms.yaml`](config/corpus_terms.yaml),
+a curated list — **review it first and cut what you never say**, since a term
+you do not use is a wasted recording. It is deliberately not
+`dictionaries/medications.txt`, which is the FDA NDC directory and mostly
+homeopathic Latin.
+
+`score_phrase_bank.py` splits every rate by whether the term is one of the
+sixteen in Whisper's initial prompt. The out-of-prompt figure is the realistic
+operating point, and it is the one to plan around.
+
 Terminal dictation:
 
 ```bash

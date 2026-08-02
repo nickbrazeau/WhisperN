@@ -1,0 +1,337 @@
+# Term bank for generating a real-voice evaluation corpus.
+#
+# WHY THIS FILE EXISTS, and why it is not `dictionaries/medications.txt`.
+#
+# That file is the FDA National Drug Code directory: 13,789 entries, most of
+# them homeopathic Latin ("aconiticum acidum", "niccolum carbonicum"). Sampling
+# it uniformly would measure how well Whisper transcribes homeopathy, not how
+# well it transcribes the drugs an infectious-diseases clinician actually says.
+# The same applies to the 7,590 NCBI organism binomials.
+#
+# So the corpus samples from this curated list instead. It is deliberately
+# small enough to read in one sitting and disagree with.
+#
+# THIS IS NOT AN ASR DICTIONARY. Nothing here is fed to Whisper's initial
+# prompt or to the validator. It exists only to build phrases to read aloud.
+# Keeping it separate from `dictionaries/` is the point: a term added here
+# changes what gets *measured*, and a term added there changes what the system
+# *does*. Conflating them would let a benchmark quietly tune its own answer.
+#
+# Contains no patient information, no institution names, and no identifiers.
+# Every phrase built from it is constructed (CLAUDE.md 3.1).
+#
+# Review before use (CLAUDE.md 8): the point of measuring named-entity accuracy
+# is to learn the rate on terms YOU say. Cut what you never say, add what you
+# say daily. A term you never use is a wasted recording.
+
+# ---------------------------------------------------------------- drugs
+
+antibacterials:
+  - amoxicillin
+  - amoxicillin-clavulanate
+  - ampicillin
+  - ampicillin-sulbactam
+  - azithromycin
+  - aztreonam
+  - cefazolin
+  - cefdinir
+  - cefepime
+  - cefiderocol
+  - cefotaxime
+  - cefoxitin
+  - ceftaroline
+  - ceftazidime
+  - ceftazidime-avibactam
+  - ceftolozane-tazobactam
+  - ceftriaxone
+  - cefuroxime
+  - cephalexin
+  - ciprofloxacin
+  - clindamycin
+  - dalbavancin
+  - daptomycin
+  - doxycycline
+  - eravacycline
+  - ertapenem
+  - fosfomycin
+  - gentamicin
+  - imipenem-cilastatin
+  - levofloxacin
+  - linezolid
+  - meropenem
+  - meropenem-vaborbactam
+  - metronidazole
+  - minocycline
+  - moxifloxacin
+  - nafcillin
+  - nitrofurantoin
+  - omadacycline
+  - oritavancin
+  - oxacillin
+  - penicillin G
+  - piperacillin-tazobactam
+  - polymyxin B
+  - rifampin
+  - tedizolid
+  - tigecycline
+  - tobramycin
+  - trimethoprim-sulfamethoxazole
+  - vancomycin
+
+antifungals:
+  - amphotericin B
+  - anidulafungin
+  - caspofungin
+  - fluconazole
+  - flucytosine
+  - griseofulvin
+  - isavuconazole
+  - itraconazole
+  - micafungin
+  - posaconazole
+  - terbinafine
+  - voriconazole
+
+antivirals:
+  - acyclovir
+  - baloxavir
+  - cidofovir
+  - foscarnet
+  - ganciclovir
+  - letermovir
+  - maribavir
+  - nirmatrelvir-ritonavir
+  - oseltamivir
+  - remdesivir
+  - valacyclovir
+  - valganciclovir
+
+antiretrovirals:
+  - abacavir
+  - bictegravir
+  - cabotegravir
+  - darunavir
+  - dolutegravir
+  - doravirine
+  - efavirenz
+  - emtricitabine
+  - lamivudine
+  - raltegravir
+  - rilpivirine
+  - ritonavir
+  - tenofovir alafenamide
+  - tenofovir disoproxil fumarate
+
+antimycobacterials:
+  - bedaquiline
+  - ethambutol
+  - isoniazid
+  - pyrazinamide
+  - rifabutin
+  - rifapentine
+
+# ---------------------------------------------------------------- organisms
+
+organisms_gram_positive:
+  - Enterococcus faecalis
+  - Enterococcus faecium
+  - Listeria monocytogenes
+  - Staphylococcus aureus
+  - Staphylococcus epidermidis
+  - Staphylococcus lugdunensis
+  - Streptococcus agalactiae
+  - Streptococcus anginosus
+  - Streptococcus mitis
+  - Streptococcus pneumoniae
+  - Streptococcus pyogenes
+
+organisms_gram_negative:
+  - Acinetobacter baumannii
+  - Bacteroides fragilis
+  - Burkholderia cepacia
+  - Citrobacter freundii
+  - Enterobacter cloacae
+  - Escherichia coli
+  - Haemophilus influenzae
+  - Klebsiella oxytoca
+  - Klebsiella pneumoniae
+  - Moraxella catarrhalis
+  - Morganella morganii
+  - Neisseria gonorrhoeae
+  - Neisseria meningitidis
+  - Proteus mirabilis
+  - Providencia stuartii
+  - Pseudomonas aeruginosa
+  - Salmonella enterica
+  - Serratia marcescens
+  - Stenotrophomonas maltophilia
+
+organisms_anaerobe:
+  - Actinomyces israelii
+  - Clostridioides difficile
+  - Cutibacterium acnes
+  - Fusobacterium necrophorum
+  - Peptostreptococcus anaerobius
+  - Prevotella melaninogenica
+
+organisms_mycobacteria:
+  - Mycobacterium abscessus
+  - Mycobacterium avium complex
+  - Mycobacterium chelonae
+  - Mycobacterium kansasii
+  - Mycobacterium tuberculosis
+  - Mycobacterium marinum
+
+organisms_fungal:
+  - Aspergillus fumigatus
+  - Aspergillus niger
+  - Blastomyces dermatitidis
+  - Candida albicans
+  - Candida auris
+  - Candida glabrata
+  - Candida parapsilosis
+  - Coccidioides immitis
+  - Cryptococcus neoformans
+  - Histoplasma capsulatum
+  - Pneumocystis jirovecii
+  - Scedosporium apiospermum
+
+organisms_other:
+  - Bartonella henselae
+  - Borrelia burgdorferi
+  - Coxiella burnetii
+  - Ehrlichia chaffeensis
+  - Leptospira interrogans
+  - Nocardia farcinica
+  - Rickettsia rickettsii
+  - Toxoplasma gondii
+  - Treponema pallidum
+  - Tropheryma whipplei
+
+resistance_phenotypes:
+  - carbapenem-resistant Enterobacterales
+  - extended-spectrum beta-lactamase producing
+  - methicillin-resistant Staphylococcus aureus
+  - methicillin-susceptible Staphylococcus aureus
+  - vancomycin-resistant Enterococcus
+
+# ---------------------------------------------------------------- clinical
+
+syndromes:
+  - bacteremia
+  - candidemia
+  - cellulitis
+  - cholangitis
+  - diabetic foot infection
+  - empyema
+  - endophthalmitis
+  - febrile neutropenia
+  - infective endocarditis
+  - meningitis
+  - necrotizing fasciitis
+  - osteomyelitis
+  - prosthetic joint infection
+  - pyelonephritis
+  - septic arthritis
+  - spinal epidural abscess
+  - ventilator-associated pneumonia
+  - vertebral osteomyelitis
+
+sites:
+  - ankle
+  - antecubital fossa
+  - calf
+  - forearm
+  - hip
+  - knee
+  - lower extremity
+  - lumbar spine
+  - shoulder
+  - thigh
+  - upper extremity
+  - wrist
+
+procedures:
+  - bronchoalveolar lavage
+  - computed tomography
+  - debridement
+  - echocardiography
+  - lumbar puncture
+  - magnetic resonance imaging
+  - positron emission tomography
+  - thoracentesis
+  - transesophageal echocardiography
+  - transthoracic echocardiography
+
+# Deliberately ambiguous. The system must NOT expand these, so the corpus has
+# to contain them to prove it does not (CLAUDE.md 2.2, 3.2).
+abbreviations_ambiguous:
+  - MS
+  - PT
+  - PCP
+  - CVA
+  - DM
+  - RA
+
+research_terms:
+  - Bayesian hierarchical model
+  - beta-binomial likelihood
+  - core genome multilocus sequence typing
+  - credible interval
+  - minimum inhibitory concentration
+  - pairwise genetic relatedness
+  - phylogenetic reconstruction
+  - single nucleotide polymorphism
+  - time-to-event analysis
+  - whole-genome sequencing
+
+# ---------------------------------------------------------------- grammar
+#
+# Numbers are spelled out because that is the convention the existing corpora
+# use, and scripts/score_transcripts.py maps spelled forms to digits before
+# comparing. Writing "2" here would not be wrong, but it would be inconsistent
+# with corpus_prompted2 and heldout_syn.
+
+doses:
+  - one gram
+  - two grams
+  - four hundred milligrams
+  - five hundred milligrams
+  - six hundred milligrams
+  - seven hundred fifty milligrams
+  - one hundred milligrams
+  - twelve point five milligrams per kilogram
+
+# Deliberately only the two routes that dominate infectious-diseases
+# dictation. Adding "topically" or "intramuscularly" let the generator emit
+# topical meropenem, and a phrase no clinician would ever say is a phrase
+# Whisper's language model has never seen in context -- which measures the
+# corpus, not the system.
+routes:
+  - intravenously
+  - orally
+
+frequencies:
+  - daily
+  - twice daily
+  - three times daily
+  - every six hours
+  - every eight hours
+  - every twelve hours
+  - every twenty-four hours
+
+durations:
+  - seven days
+  - ten days
+  - fourteen days
+  - twenty-one days
+  - six weeks
+  - three months
+
+lab_values:
+  - a creatinine of one point four
+  - a white count of eighteen point two
+  - a lactate of three point one
+  - a procalcitonin of zero point eight
+  - a temperature of thirty-eight point two degrees Celsius
+  - an erythrocyte sedimentation rate of eighty-four

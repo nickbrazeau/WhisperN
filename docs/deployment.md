@@ -132,7 +132,18 @@ not begin with direct entry into a medical record.
 
 Given 62.5 % named-entity accuracy (`docs/validation-report.md` §3.3), **read
 every dictation containing a drug or organism name before using it.** Roughly
-one such name in three is wrong.
+one such name in three is wrong — though that figure is five correct
+observations out of eight, a 95 % interval of 31–86 %, so the true rate is
+genuinely unknown. `scripts/build_phrase_bank.py` exists to settle it.
+
+**Check which microphone is live.** `recording.prefer_microphone: headset`
+means a connected Bluetooth headset wins over the built-in microphone, and the
+Bluetooth path negotiates HFP at 16 kHz narrowband — a compressed voice codec,
+not a clean downsample. That path has never been benchmarked against this
+corpus. Since named-entity recognition is the weak metric and audio quality
+feeds it directly, prefer the built-in microphone for anything that matters
+until it is measured, or set `prefer_microphone: builtin`. The active device is
+in `runtime/tmp/hammerspoon-status.txt` and in the GUI's title bar.
 
 ---
 
