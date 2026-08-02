@@ -355,3 +355,60 @@ def test_applescript_literals_are_escaped():
 
     assert _as_literal('Fo"o') == 'Fo\\"o'
     assert _as_literal("Fo\\o") == "Fo\\\\o"
+
+
+# ---------------------------------------------------------------- local vocabulary
+
+
+def _dictionaries_with_local(tmp_path: Path, entries: str) -> Path:
+    """A dictionary directory carrying a local proper-noun list.
+
+    Built in a temp directory rather than reusing the real one, because
+    `institutions_and_people.local.txt` is gitignored (CLAUDE.md §5) and is
+    absent on a fresh checkout. A test that depended on it would pass here and
+    fail in a clean clone.
+    """
+    d = tmp_path / "dictionaries"
+    d.mkdir()
+    for name in ("medications.txt", "microorganisms.txt", "general_medicine.txt",
+                 "infectious_diseases.txt", "procedures.txt", "research_terms.txt"):
+        src = REPO_ROOT / "dictionaries" / name
+        (d / name).write_text(src.read_text(encoding="utf-8") if src.exists() else "",
+                              encoding="utf-8")
+    (d / "institutions_and_people.local.txt").write_text(entries, encoding="utf-8")
+    return d
+
+
+def test_local_proper_nouns_are_not_flagged_as_drug_like(tmp_path):
+    """A listed proper noun stops tripping the unknown-word check.
+
+    "Google" in ordinary email opened a clinical review dialog, and a review
+    nobody reads is worse than no review.
+    """
+    v = Validator.from_dictionaries(
+        _dictionaries_with_local(tmp_path, "# local\nGoogle\nSharePoint\n"),
+        "clinical_strict")
+    assert v._unrecognized("Google") == []
+    assert v._unrecognized("SharePoint") == []
+
+
+def test_local_vocabulary_does_not_mask_mangled_drug_names(tmp_path):
+    """The safety property the local list must never cost.
+
+    Suppressing proper nouns must not suppress the ASR errors this check
+    exists for. `pipercellum` is real observed output for piperacillin.
+    """
+    v = Validator.from_dictionaries(
+        _dictionaries_with_local(tmp_path, "Google\n"), "clinical_strict")
+    for mangled in ("pipercellum", "ceftazidimabibactam", "pharsinica"):
+        assert v._unrecognized(mangled), f"{mangled} must still be flagged"
+
+
+def test_validator_works_without_the_local_file(tmp_path):
+    """A fresh checkout has no local list; loading must not break."""
+    d = tmp_path / "dictionaries"
+    d.mkdir()
+    (d / "medications.txt").write_text("cefazolin\n", encoding="utf-8")
+    v = Validator.from_dictionaries(d, "clinical_strict")
+    assert not (d / "institutions_and_people.local.txt").exists()
+    assert v._unrecognized("pipercellum")

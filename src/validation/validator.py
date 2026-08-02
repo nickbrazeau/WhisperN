@@ -223,9 +223,21 @@ class Validator:
             mode=mode,
         )
         # Include the curated clinical dictionaries as known vocabulary.
+        #
+        # institutions_and_people.local.txt is the local, gitignored list of
+        # proper nouns (CLAUDE.md §5). Without it the unknown-word check fires
+        # on any proper noun of six or more letters that web2 does not carry --
+        # "Google" in ordinary email, and every colleague and institution name.
+        # That is review fatigue, and a review nobody reads is worse than no
+        # review: it trains the habit of clicking through the dialog that also
+        # guards mangled drug names.
+        #
+        # It is loaded last and, like the others, skipped when absent, so a
+        # fresh checkout behaves exactly as before.
         extra = [directory / n for n in (
             "general_medicine.txt", "infectious_diseases.txt",
             "procedures.txt", "research_terms.txt",
+            "institutions_and_people.local.txt",
         )]
         inst.known_words = inst._load_known_words(extra)
         return inst

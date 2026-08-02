@@ -50,9 +50,9 @@ take. It never contains transcript text.
 | 3 | Cloud fallback is disabled | **Yes** — no cloud code path; non-loopback endpoints refused at construction |
 | 4 | Temporary audio is deleted | **Yes** — verified, including after SIGTERM |
 | 5 | Transcript logging is disabled | **Yes** — verified no source path logs transcript text |
-| 6 | Protected-token validator is active | **Yes** — 43 tests passing |
+| 6 | Protected-token validator is active | **Yes** — 61 tests passing |
 | 7 | `clinical_strict` requires review on protected change | **Yes** — default mode; never returns `safe_to_paste` on a protected change |
-| 8 | Synthetic adversarial tests pass | **Yes** — 43 validator tests; 21/21 polisher cases (unused) |
+| 8 | Synthetic adversarial tests pass | **Yes** — 61 validator tests; 21/21 polisher cases (unused) |
 | 9 | **The user has reviewed the glossary** | **Yes — reviewed 2026-07-27** |
 | 10 | The user has reviewed all exact replacements | **Vacuously satisfied** — all 4 rules are `enabled: false`; none active. See §6 before enabling any |
 | 11 | Active model and configuration documented | **Yes** — §3 below |
@@ -101,7 +101,7 @@ Run all three. Any failure blocks deployment.
 
 ```bash
 scripts/offline_smoke_test.sh                # expect 16 pass, 0 fail
-.venv/bin/python -m pytest tests/ -q         # expect 43 passed
+.venv/bin/python -m pytest tests/ -q         # expect 61 passed
 scripts/record_baseline.sh --check           # expect microphone OK
 ```
 

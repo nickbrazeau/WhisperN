@@ -131,6 +131,24 @@ homeopathic Latin.
 sixteen in Whisper's initial prompt. The out-of-prompt figure is the realistic
 operating point, and it is the one to plan around.
 
+### Reducing false review prompts
+
+The validator flags any word of six or more letters that is neither ordinary
+English nor known medical vocabulary — the check that catches `pipercellum`
+for piperacillin. It also catches proper nouns the 1934 web2 word list
+predates, so "Google" in an ordinary email opens a clinical review dialog.
+
+Add names you actually say to
+`dictionaries/institutions_and_people.local.txt` — colleagues, institutions,
+products, places. It is gitignored by design (CLAUDE.md §5) and loaded
+automatically when present.
+
+**One rule, and it is the whole safety property:** add a word because you *say*
+it, never because you *saw* it in a transcript and wanted the warning to stop.
+Those feel identical and are opposites — the second is how a garbled drug name
+gets whitelisted and stops being caught. Words under six letters are ignored by
+the check anyway, so `Epic`, `Zoom`, and `Slack` never needed an entry.
+
 Terminal dictation:
 
 ```bash
