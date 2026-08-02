@@ -3,7 +3,7 @@
 CLAUDE.md §11 deliverable 13. Covers what to deploy, how to verify it, how to
 roll back, and what to do when a stage fails.
 
-Last updated: 2026-07-27.
+Last updated: 2026-08-02.
 
 ---
 
@@ -16,12 +16,23 @@ A **raw-transcript dictation pipeline with review**. Polishing is disabled
 microphone → VAD gate → whisper.cpp → normalize → validate → review
 ```
 
-Two front ends, with different paste behaviour:
+Three front ends:
 
-- `scripts/dictate.py` and the FN-hold Hammerspoon hotkey — **clipboard only**,
-  never paste.
-- `scripts/whispern_app.py` (desktop GUI) — pastes at the cursor, but only
-  `safe_to_paste` results and only when auto-paste is ticked. See §6.3.
+- `scripts/dictate.py` — **clipboard only**, never pastes. The pipeline all
+  three share; run it directly to score or debug without a target application.
+- **Hammerspoon global hotkey** — ⌘FN toggles recording, ⌘⌃A anchors the paste
+  destination. Pastes `safe_to_paste` results at the cursor or the anchor;
+  `review_required` and `rejected` open an **editable** dialog needing an
+  explicit click. `AUTO_PASTE = false` in `init.lua` reverts it to
+  clipboard-only.
+- `scripts/whispern_app.py` (desktop GUI) — pastes at the cursor, only
+  `safe_to_paste`, only when auto-paste is ticked. See §6.3.
+
+**Verifying the hotkey is live.** Hammerspoon logs nothing externally, so
+`init.lua` writes `runtime/tmp/hammerspoon-status.txt` on load, carrying the
+load time, the active keys, `AUTO_PASTE`, and the resolved microphone. After
+editing the config, read that file: a stale timestamp means the reload did not
+take. It never contains transcript text.
 
 ---
 
@@ -178,7 +189,20 @@ Expect Whisper to emit invented text on silence again — `you`, `-`, or
 `Thank you.` This is a real regression in safety, so treat it as temporary and
 capture the audio that was wrongly rejected.
 
-### 5.5 Full revert
+### 5.5 Roll back the hotkey paste
+
+The paste path is the newest and least-exercised component. To stand it down
+without losing dictation, edit `hammerspoon/init.lua`:
+
+```lua
+local AUTO_PASTE = false     -- clipboard only; review dialogs still work
+```
+
+Then reload Hammerspoon and confirm `runtime/tmp/hammerspoon-status.txt` shows
+`auto_paste  false` with a current timestamp. To disable the hotkey entirely,
+quit Hammerspoon; `scripts/dictate.py` and the GUI are unaffected.
+
+### 5.6 Full revert
 
 ```bash
 git log --oneline

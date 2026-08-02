@@ -6,10 +6,12 @@ upstream application: the post-transcription hook, structured validation, the
 raw/polished review interface, temporary-audio deletion, and a visible mode
 indicator.
 
-PASTING IS NOT IMPLEMENTED AND IS NOT ENABLED. CLAUDE.md §11 says not to skip
-to automatic pasting, and §6 Phase 8 requires the full deployment checklist
-first. This command prints the result and, with --copy, can place it on the
-clipboard as an explicit user action.
+THIS COMMAND NEVER PASTES. It prints the result and, with --copy, places it on
+the clipboard. Delivering text into an application is the caller's job, and
+both callers -- hammerspoon/init.lua and scripts/whispern_app.py -- paste only
+a `safe_to_paste` result, which is what CLAUDE.md §4.2 permits. Keeping the
+decision out here means the pipeline can be run and scored without a target
+application existing at all.
 
 Usage:
   scripts/dictate.py                    # record until Enter, then process
@@ -162,7 +164,7 @@ def main() -> int:
     if not quiet:
         print(f"  VAD gate  : {GRN}ON{RST}" if use_vad else f"  VAD gate  : {RED}OFF{RST}")
     if not quiet:
-        print(f"  paste     : {GRN}DISABLED{RST}  {DIM}(review only){RST}\n")
+        print(f"  paste     : {GRN}NOT FROM HERE{RST}  {DIM}(review only){RST}\n")
 
     polisher = None
     if polishing_on and model and not model.startswith("REPLACE"):

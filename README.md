@@ -22,18 +22,22 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 2 | Medical terminology in ASR | Complete — in-sample only; [does not generalize](docs/phase2-results.md#8a-held-out-evaluation--the-prompt-does-not-generalize) |
 | 3 | Constrained medical polishing | Built, **deferred** — [ADR 0001](docs/decisions/0001-defer-local-polishing-model.md) |
 | 4 | Protected-token validator | Complete — [40/40 tests, 100% precision](docs/phase4-results.md) |
-| 5 | Desktop integration | Partial — VAD gate, review interface; no paste path |
+| 5 | Desktop integration | Complete — VAD gate, review interface, global ⌘FN hotkey, paste at cursor or anchor |
 | 6 | Synthetic medical test suite | Complete — [gate passed](docs/phase6-results.md); named-entity accuracy 62.5% |
 | 7 | Offline and privacy verification | Complete — [16/16 checks](docs/validation-report.md) |
 | 8 | Deployment | Checklist complete — [guide](docs/deployment.md); glossary reviewed 2026-07-27 |
 
-**Usable for reviewed, raw-transcript dictation; not for automatic pasting.**
+**Usable for raw-transcript dictation. Read what it pastes.**
 `scripts/dictate.py` records, gates on voice activity, transcribes, validates,
 and presents the result for review. Polishing is deliberately disabled
-([ADR 0001](docs/decisions/0001-defer-local-polishing-model.md)). There is no
-paste-at-cursor path, by design — CLAUDE.md §11 forbids skipping to automatic
-pasting, and Phase 8's checklist is not complete. Automatic pasting is not implemented and must not be
-until Phase 4 passes (CLAUDE.md §11).
+([ADR 0001](docs/decisions/0001-defer-local-polishing-model.md)).
+
+Pasting is enabled only for `safe_to_paste` results, which is what CLAUDE.md
+§4.2 permits — `review_required` and `rejected` open a modal dialog and take a
+second, explicit click. "Safe" means no protected content changed; it does not
+mean every word is right. Named-entity accuracy is 62.5% and ~1 dictation in 8
+is flagged for review, so start with email and research dictation rather than
+direct entry into a record (CLAUDE.md §6 Phase 8).
 
 ---
 
@@ -71,6 +75,18 @@ scripts/whispern_app.py
 
 Space to start/stop. Safe results paste at the cursor; anything needing review
 is shown and must be pasted deliberately.
+
+Global hotkey, no window — [`hammerspoon/`](hammerspoon/README.md):
+
+| Key | Does |
+|---|---|
+| **⌘ FN** | Toggle recording: press to start, press again to stop |
+| **⌘ ⌃ A** | Anchor the paste destination to the current app, window, and text field; press again there to clear |
+| **⌘ ⌃ ⇧ A** | Clear the anchor |
+
+With no anchor, text pastes into the application that was frontmost when
+recording started — and only if it still is, otherwise the paste is blocked and
+the text is left on the clipboard.
 
 Terminal dictation:
 
