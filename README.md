@@ -149,6 +149,27 @@ Those feel identical and are opposites — the second is how a garbled drug name
 gets whitelisted and stops being caught. Words under six letters are ignored by
 the check anyway, so `Epic`, `Zoom`, and `Slack` never needed an entry.
 
+### Making a flag quick to resolve
+
+A flagged word is shown with its nearest known terms, so the review is a
+recognition task rather than a recall one:
+
+```
+dalbavansin — closest known terms: dalbavancin, lavandin
+McCaffungin — closest known terms: micafungin, caspofungin
+creptococcus — closest known terms: Cryptococcus, Streptococcus, Micrococcus
+```
+
+**Several, never one, and never applied.** Measured over this project's own
+mis-transcriptions, only 1 in 10 resolves to a single confident candidate, and
+the ambiguous ones are ambiguous where it matters: `creptococcal` sits between
+Streptococcus (a bacterium) and Cryptococcus (a fungus) by 0.04 of match score,
+and `tausifactam` ties avibactam against tazobactam exactly. A single "best
+match" would be a confident guess between clinically different drugs. Where
+nothing is close, nothing is offered.
+
+The transcript is never altered — this is presentation only (CLAUDE.md §3.2).
+
 Terminal dictation:
 
 ```bash

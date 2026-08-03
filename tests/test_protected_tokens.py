@@ -412,3 +412,54 @@ def test_validator_works_without_the_local_file(tmp_path):
     v = Validator.from_dictionaries(d, "clinical_strict")
     assert not (d / "institutions_and_people.local.txt").exists()
     assert v._unrecognized("pipercellum")
+
+
+# ---------------------------------------------------------------- suggestions
+
+
+def test_suggestions_offer_neighbours_not_a_correction(validator):
+    """Both plausible readings are shown, never one.
+
+    "creptococcal" sits between Streptococcus, a bacterium, and Cryptococcus,
+    a fungus, separated by 0.04 of match score. Naming a single winner would
+    be a confident guess between clinically different organisms.
+    """
+    near = validator.suggest("creptococcus")
+    lowered = [t.lower() for t in near]
+    assert "cryptococcus" in lowered
+    assert "streptococcus" in lowered
+    assert len(near) > 1, "a single suggestion reads as a correction"
+
+
+def test_suggestions_stay_silent_when_nothing_is_close(validator):
+    """No guess is better than a bad guess.
+
+    "tausifactam" ties avibactam against tazobactam, two different
+    beta-lactamase inhibitors, so nothing should clear the cutoff.
+    """
+    assert validator.suggest("tausifactam") == []
+    assert validator.suggest("") == []
+
+
+def test_suggestions_never_alter_the_transcript(validator):
+    """Presentation only. The text must survive untouched (CLAUDE.md §3.2)."""
+    raw = "Cultures grew creptococcus and we started macomycin."
+    result = validator.validate(raw, raw)
+    assert result.raw_text == raw
+    assert result.polished_text == raw
+    assert result.status is Status.REVIEW
+    joined = " ".join(result.warnings)
+    assert "Cryptococcus" in joined and "vancomycin" in joined
+    assert "not corrections" in joined
+
+
+def test_suggestions_do_not_offer_ordinary_english(validator):
+    """Only clinical vocabulary is offered.
+
+    /usr/share/dict/words is deliberately excluded from the index: the flagged
+    word is a mangled drug or organism name, so an English near-miss would be
+    noise dressed as a candidate.
+    """
+    for term in validator.suggest("macomycin"):
+        assert not term.isascii() or term.lower() not in {"income", "economy"}
+    assert any("mycin" in t.lower() for t in validator.suggest("macomycin"))

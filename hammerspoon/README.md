@@ -62,6 +62,11 @@ offers a single-line text input inside an alert, which renders a
 multi-sentence transcript as one long unreadable line. Take **Copy only** and
 correct the text in the destination application, which has a real editor.
 
+A flagged word is listed with its nearest known terms — `dalbavansin — closest
+known terms: dalbavancin, lavandin` — so resolving it is recognition rather
+than recall. Several are shown, never one, and none is ever applied: the
+neighbours of a mangled drug name are often clinically different drugs.
+
 Only `safe_to_paste` is ever pasted without being read (CLAUDE.md §4.2).
 
 "Safe" means **no protected content changed** — not that every word is right.

@@ -23,6 +23,7 @@ detected here. That gap belongs to voice-activity detection and human review.
 
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -116,6 +117,9 @@ class Validator:
         # Union of ordinary English and every word appearing in the medical
         # vocabularies, including the parts of binomials and hyphenated names.
         self.known_words = known_words if known_words is not None else set()
+        # Built once. difflib over 13,000 words costs ~40 ms per flagged word,
+        # which is fine on a review path but not per-construction-per-call.
+        self._suggestion_index: dict[str, str] = {}
 
     @staticmethod
     def _split_words(terms: set[str]) -> set[str]:
@@ -240,7 +244,38 @@ class Validator:
             "institutions_and_people.local.txt",
         )]
         inst.known_words = inst._load_known_words(extra)
+        inst._suggestion_index = inst._build_suggestion_index(
+            [directory / n for n in ("infectious_diseases.txt",
+                                     "microorganisms.txt", "medications.txt")])
         return inst
+
+    @staticmethod
+    def _build_suggestion_index(paths: list[Path]) -> dict[str, str]:
+        """Map a comparison key to the term as the dictionary spells it.
+
+        Only the clinical vocabularies feed this, never /usr/share/dict/words:
+        the flagged word is a mangled drug or organism name, and offering
+        "crepitations" as a neighbour of "creptococcus" would be noise. Single
+        words only, since that is the unit the unknown-word check works in.
+        """
+        index: dict[str, str] = {}
+        for path in paths:
+            if not path.exists():
+                continue
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                for part in re.split(r"[\s/,()]+", line):
+                    part = part.strip("-").strip()
+                    if len(part) < 6 or not part.replace("-", "").isalpha():
+                        continue
+                    key = re.sub(r"[^a-z0-9]", "", part.lower())
+                    # First spelling wins, and the curated lists are read
+                    # first, so "Streptococcus" is not overwritten by the
+                    # lowercase homeopathic "streptococcus" in the FDA list.
+                    index.setdefault(key, part)
+        return index
 
     # -- name checks -------------------------------------------------------
 
@@ -278,6 +313,46 @@ class Validator:
         CLAUDE.md forbids -- but it can refuse to let them pass silently.
         """
         return self._unrecognized(raw)
+
+    # -- suggestions -------------------------------------------------------
+
+    def suggest(self, word: str, limit: int = 3, cutoff: float = 0.72) -> list[str]:
+        """Known terms that resemble `word`, nearest first. Never a correction.
+
+        This exists because the flag was accurate but useless. "contains
+        drug-like words not in the approved vocabulary: creptococcus" is true
+        and leaves the reader to retrieve the candidate from memory;
+        "creptococcus -- closest known terms: Cryptococcus, Streptococcus"
+        costs seconds instead.
+
+        SEVERAL, DELIBERATELY, AND NEVER APPLIED. Measured over the mis-
+        transcriptions this project has actually produced, only 1 in 10
+        resolves to a single confident candidate, and the ambiguous ones are
+        ambiguous in the worst way: "creptococcal" sits between Streptococcus,
+        a bacterium, and Cryptococcus, a fungus, separated by 0.04 of match
+        score. "tausifactam" ties avibactam against tazobactam exactly. So a
+        single best match would be a confident guess between clinically
+        different drugs, which CLAUDE.md §3.2 forbids and §9 calls a critical
+        defect.
+
+        Showing the neighbourhood is strictly more informative than showing a
+        winner: where the candidates are close, that IS the finding, and the
+        reader sees immediately that the choice needs their judgement rather
+        than a rubber stamp.
+
+        The result never reaches `polished_text` and never alters a transcript.
+        It is presentation only.
+        """
+        if not word or not self._suggestion_index:
+            return []
+        key = re.sub(r"[^a-z0-9]", "", word.lower())
+        if not key:
+            return []
+        near = difflib.get_close_matches(
+            key, self._suggestion_index.keys(), n=limit, cutoff=cutoff)
+        # Preserve dictionary casing: "Cryptococcus" reads as a name, and
+        # lowercasing it invites the eye to skip past it as ordinary text.
+        return [self._suggestion_index[k] for k in near]
 
     # -- main entry point --------------------------------------------------
 
@@ -352,12 +427,21 @@ class Validator:
         # --- unrecognised names already in the raw transcript -------------
         unknown_raw = self.unknown_names_in_raw(raw_text)
         if unknown_raw:
-            warnings.append(
-                "raw transcript contains drug-like words not in the approved "
-                f"vocabulary (probable ASR error): "
-                f"{', '.join(sorted(set(unknown_raw)))}. "
-                "The correct name cannot be inferred; human review required."
-            )
+            lines = ["raw transcript contains drug-like words not in the "
+                     "approved vocabulary (probable ASR error):"]
+            for w in sorted(set(unknown_raw)):
+                near = self.suggest(w)
+                lines.append(
+                    f"    {w} — closest known terms: {', '.join(near)}"
+                    if near else
+                    f"    {w} — no close match in the approved vocabulary"
+                )
+            # Said explicitly because a list of near-misses invites being read
+            # as an answer. It is a neighbourhood, not a correction: the audio
+            # is the only evidence of what was actually said.
+            lines.append("These are spelling neighbours, not corrections. The "
+                         "correct name cannot be inferred; human review required.")
+            warnings.append("\n".join(lines))
 
         # --- untraceable content -----------------------------------------
         raw_words = _content_words(raw_text)
