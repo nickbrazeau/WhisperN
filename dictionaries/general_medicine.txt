@@ -173,3 +173,8 @@ acetaminophen
 ibuprofen
 oxycodone
 hydromorphone
+immunocompromised
+immunosuppressed
+immunosuppression
+neutropenic
+bacteremic

@@ -463,3 +463,58 @@ def test_suggestions_do_not_offer_ordinary_english(validator):
     for term in validator.suggest("macomycin"):
         assert not term.isascii() or term.lower() not in {"income", "economy"}
     assert any("mycin" in t.lower() for t in validator.suggest("macomycin"))
+
+
+# ------------------------------------------------------- modern English
+
+
+@pytest.mark.parametrize("word", [
+    "anymore", "website", "workflow", "online", "laptop", "healthcare",
+    "spreadsheet", "followup", "username", "telehealth",
+])
+def test_modern_english_is_not_flagged_as_drug_like(validator, word):
+    """web2 is a 1934 dictionary and has none of these.
+
+    Observed in use: dictating "Why isn't this working anymore?" opened a
+    clinical review dialog on "anymore".
+    """
+    assert validator.unknown_names_in_raw(word) == []
+
+
+@pytest.mark.parametrize("word", [
+    "immunocompromised", "neutropenic", "bacteremic", "antibiogram",
+])
+def test_clinical_vocabulary_is_known(validator, word):
+    """These are clinical, so they belong in the medical dictionaries.
+
+    Kept out of modern_english.txt deliberately: that file is general English
+    only, and mixing clinical terms into it would blur which list to extend.
+    """
+    assert validator.unknown_names_in_raw(word) == []
+
+
+@pytest.mark.parametrize("mangled", [
+    "pipercellum",     # piperacillin
+    "sifteraline",     # sertraline -- splits into "sifter" + "aline"
+    "septipine",       # cefepime   -- splits into "septi" + "pine"
+    "bankomycin",      # vancomycin
+    "creptococcus",    # Streptococcus / Cryptococcus
+    "dalbavansin",     # dalbavancin
+])
+def test_english_vocabulary_never_unflags_a_mangled_drug_name(validator, mangled):
+    """The safety property the modern-English list must not cost.
+
+    Compound splitting was prototyped as the elegant fix for the words above
+    and rejected precisely because of the two marked cases: it unflagged
+    sertraline and cefepime. An explicit list cannot leak, and this test is
+    what holds that line if anyone reaches for the rule again.
+    """
+    assert validator.unknown_names_in_raw(mangled), f"{mangled} must stay flagged"
+
+
+def test_ordinary_sentence_is_safe_to_paste(validator):
+    """The reported case, end to end."""
+    text = "Why isn't this working anymore?"
+    result = validator.validate(text, text)
+    assert result.status is Status.SAFE
+    assert result.warnings == []

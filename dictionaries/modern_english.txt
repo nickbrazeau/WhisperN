@@ -1,0 +1,122 @@
+# Ordinary modern English that /usr/share/dict/words predates.
+#
+# WHY THIS EXISTS. The validator flags any word of six or more letters that is
+# neither ordinary English nor known medical vocabulary, which is the check
+# that catches "pipercellum" for piperacillin. Its English reference is web2,
+# a dictionary compiled in 1934. It has no "website", no "workflow", no
+# "anymore" — so dictating an ordinary email raised a clinical review dialog
+# on words like "anymore", and roughly a third of common modern vocabulary
+# tripped it.
+#
+# A review nobody reads is worse than no review: it trains clicking through
+# the same dialog that guards mangled drug names.
+#
+# WHY A LIST RATHER THAN A RULE. Nearly every word here is a closed compound
+# ("any" + "more"), so splitting compounds and checking both halves looks like
+# the elegant fix. It was prototyped and rejected: it also unflagged real
+# mis-transcriptions, because "sifteraline" splits into "sifter" + "aline" and
+# "septipine" into "septi" + "pine". That is sertraline and cefepime going
+# silently unflagged — a 13% leak rate on exactly the words this check exists
+# to catch. An explicit list cannot leak; only what is listed passes.
+#
+# SCOPE. General and technical English only. Clinical vocabulary belongs in
+# general_medicine.txt or infectious_diseases.txt, and names of people and
+# institutions belong in institutions_and_people.local.txt, which is
+# gitignored. Nothing here may be a plausible garbled drug or organism name.
+#
+# This file is committed: it contains no clinical judgement and nothing
+# identifying, just English the 1930s had not invented yet.
+#
+# One term per line. Case-insensitive.
+
+# --- everyday compounds -----------------------------------------------------
+anymore
+paperwork
+playbook
+checklist
+checklists
+weeknight
+weeknights
+workaround
+workload
+workspace
+workstation
+
+# --- computing and communication --------------------------------------------
+website
+websites
+online
+offline
+internet
+intranet
+hyperlink
+username
+usernames
+password
+passwords
+download
+downloads
+upload
+uploads
+smartphone
+smartphones
+smartwatch
+laptop
+laptops
+desktop
+desktops
+touchscreen
+webcam
+keyboard
+database
+databases
+metadata
+backend
+frontend
+filename
+filenames
+dropdown
+checkbox
+screenshot
+screenshots
+login
+logout
+signin
+signup
+
+# --- work and scheduling ----------------------------------------------------
+workflow
+workflows
+spreadsheet
+spreadsheets
+dashboard
+dashboards
+timeline
+timelines
+deadline
+deadlines
+followup
+handoff
+handoffs
+onboarding
+offboarding
+podcast
+podcasts
+webinar
+webinars
+videoconference
+teleconference
+
+# --- healthcare administration ----------------------------------------------
+# Administrative rather than clinical: these describe how care is organised
+# and paid for, not what is wrong with anyone.
+healthcare
+caregiver
+caregivers
+copayment
+preauthorization
+prescriber
+prescribers
+credentialing
+telehealth
+telemedicine

@@ -135,8 +135,15 @@ operating point, and it is the one to plan around.
 
 The validator flags any word of six or more letters that is neither ordinary
 English nor known medical vocabulary — the check that catches `pipercellum`
-for piperacillin. It also catches proper nouns the 1934 web2 word list
-predates, so "Google" in an ordinary email opens a clinical review dialog.
+for piperacillin. Its English reference is web2, a dictionary compiled in
+**1934**, so it also catches anything newer than that: "Google", but also
+"anymore", "website", and "workflow".
+
+Modern general vocabulary lives in
+[`dictionaries/modern_english.txt`](dictionaries/modern_english.txt) and is
+committed. Clinical terms go in `general_medicine.txt` or
+`infectious_diseases.txt`. Names of people and institutions go in the
+gitignored local file below.
 
 Add names you actually say to
 `dictionaries/institutions_and_people.local.txt` — colleagues, institutions,

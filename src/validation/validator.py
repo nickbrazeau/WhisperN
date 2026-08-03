@@ -241,6 +241,10 @@ class Validator:
         extra = [directory / n for n in (
             "general_medicine.txt", "infectious_diseases.txt",
             "procedures.txt", "research_terms.txt",
+            # Ordinary modern English that web2, a 1934 dictionary, predates.
+            # Without it "anymore" and "website" are reported as probable drug
+            # names in any non-clinical dictation.
+            "modern_english.txt",
             "institutions_and_people.local.txt",
         )]
         inst.known_words = inst._load_known_words(extra)
