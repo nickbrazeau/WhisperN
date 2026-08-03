@@ -53,17 +53,14 @@ dialogs and their explicit paste button still work.
 | Outcome | Behaviour |
 |---|---|
 | `safe_to_paste` | Copied, then pasted at the destination |
-| `review_required` | **Modal dialog, editable.** Correct the text, then Paste or Copy only |
-| `rejected` | Same editable dialog, showing the raw transcript |
+| `review_required` | **Modal dialog** with the text and every warning. Copied. Pasting takes a second, explicit click after reading |
+| `rejected` | Modal dialog with the raw transcript; same explicit second click |
 | `no_speech` | `No speech detected`; nothing copied |
 
-The review dialog's text is **editable**. A flagged result is usually right
-except for one word — the validator stops on a single unrecognised term, not on
-a broken sentence — so fix it there and carry on. Whatever is in the field when
-you press a button is what gets pasted *and* what lands on the clipboard.
-
-It is a single-line field, which suits a one-word correction and is cramped for
-a long paragraph. For those, take **Copy only** and edit in the destination.
+The dialog is read-only. An editable field was tried and reverted: `hs.dialog`
+offers a single-line text input inside an alert, which renders a
+multi-sentence transcript as one long unreadable line. Take **Copy only** and
+correct the text in the destination application, which has a real editor.
 
 Only `safe_to_paste` is ever pasted without being read (CLAUDE.md §4.2).
 

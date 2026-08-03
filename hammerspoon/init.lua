@@ -332,60 +332,39 @@ end
 -- Review presentation. Deliberately modal and deliberately awkward: a result
 -- that needs review should interrupt, not scroll past in a notification.
 --
--- The text is EDITABLE. A flagged result is usually right except for one word
--- -- the validator stops on a single unrecognised term, not on a broken
--- sentence -- so the useful action is to fix that word and carry on. Offering
--- only "paste it" or "don't" pushes the user to paste something they know is
--- wrong and repair it afterwards, or to redictate the whole utterance. Both
--- are worse than letting them correct it here.
---
--- Whatever is in the field when a button is pressed is what gets used, so an
--- edit propagates to the clipboard as well as to the paste. The raw transcript
--- is not kept afterwards (CLAUDE.md §3.3): the corrected text is what the user
--- accepted, and it replaces the transcript rather than sitting beside it.
---
--- hs.dialog.textPrompt is a single-line field. That suits the common case, a
--- one-word correction, and is cramped for a long paragraph -- in which case
--- Copy only and edit in the destination is the better move.
+-- Read-only. An editable field was tried here and reverted: hs.dialog's text
+-- input is a single-line NSTextField inside an alert, which renders a
+-- multi-sentence transcript as one long unreadable line. Correcting text is
+-- better done in the destination application, which has a real editor, so the
+-- choice here is only whether to paste or to keep the clipboard.
 --
 -- The dialog takes focus, which is why its paste is an `explicit` one -- the
 -- destination has to be re-activated afterwards.
-local function showReview(title, result)
-  local text = result.text or result.raw_text or ""
-
-  local notes = {}
+local function showReview(title, result, style)
+  local lines = { result.text or result.raw_text or "" }
   if result.warnings and #result.warnings > 0 then
-    for _, w in ipairs(result.warnings) do table.insert(notes, "• " .. w) end
+    table.insert(lines, "")
+    for _, w in ipairs(result.warnings) do table.insert(lines, "• " .. w) end
   end
   if result.protected_changes and #result.protected_changes > 0 then
-    for _, c in ipairs(result.protected_changes) do table.insert(notes, "! " .. c) end
+    table.insert(lines, "")
+    for _, c in ipairs(result.protected_changes) do table.insert(lines, "! " .. c) end
   end
-  table.insert(notes, "")
-  table.insert(notes, "Correct the text below if it is wrong, then choose. "
-    .. "Nothing has been pasted.")
+  table.insert(lines, "")
+  table.insert(lines, "On the clipboard. Nothing has been pasted.")
+  local body = table.concat(lines, "\n")
 
   -- Offer a paste only where there is somewhere to paste to. A button that
   -- reports "no target application" after being clicked is worse than no
   -- button.
   local _, destName = destinationApp()
-  local pasteButton = destName and ("Paste into " .. destName) or nil
-
-  local button, edited = hs.dialog.textPrompt(
-    title, table.concat(notes, "\n"), text,
-    pasteButton or "Copy only", pasteButton and "Copy only" or "")
-
-  -- textPrompt returns nil for the text if the field was somehow unavailable;
-  -- falling back to the transcript keeps a failure from silently emptying the
-  -- clipboard, which would look like a successful paste of nothing.
-  edited = edited or text
-  if edited ~= text then
-    -- The clipboard must carry what the user approved, not what was heard --
-    -- every failure path below leaves them a working ⌘V, and it must be the
-    -- corrected text.
-    hs.pasteboard.setContents(edited)
+  if not destName then
+    hs.dialog.blockAlert(title, body, "OK — copied", "", style)
+    return
   end
 
-  if pasteButton and button == pasteButton then
+  local pasteButton = "Paste into " .. destName
+  if hs.dialog.blockAlert(title, body, "Copy only", pasteButton, style) == pasteButton then
     paste(true, function(status, detail)
       hs.alert.show(status == "pasted" and ("Pasted → " .. detail)
                     or ("Not pasted: " .. detail .. " — still on the clipboard"), 3)
@@ -430,10 +409,10 @@ local function process(path)
       end
 
     elseif result.outcome == "review_required" then
-      showReview("Review required — not safe to use unchecked", result)
+      showReview("Review required — not safe to use unchecked", result, "warning")
 
     elseif result.outcome == "rejected" then
-      showReview("Rejected — this is the raw transcript", result)
+      showReview("Rejected — this is the raw transcript", result, "critical")
 
     else
       hs.alert.show("Error: " .. (result.error or "unknown"), 4)

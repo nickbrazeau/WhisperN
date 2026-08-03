@@ -22,7 +22,7 @@ Three front ends:
   three share; run it directly to score or debug without a target application.
 - **Hammerspoon global hotkey** — ⌘FN toggles recording, ⌘⌃A anchors the paste
   destination. Pastes `safe_to_paste` results at the cursor or the anchor;
-  `review_required` and `rejected` open an **editable** dialog needing an
+  `review_required` and `rejected` open a read-only dialog needing an
   explicit click. `AUTO_PASTE = false` in `init.lua` reverts it to
   clipboard-only.
 - `WhisperN.app` / `scripts/whispern_app.py` (desktop GUI) — pastes at the
