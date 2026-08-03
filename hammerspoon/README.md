@@ -37,8 +37,14 @@ somewhere you are not looking.
 **Why "still frontmost" matters.** ⌘V goes wherever macOS thinks the front
 application is. If you start dictating in Mail and switch to Slack while it
 transcribes, the paste is blocked rather than delivered to Slack. Nothing is
-typed anywhere it was not confirmed; the text stays on the clipboard and ⌘V
-works.
+typed anywhere it was not confirmed.
+
+**A blocked paste is never dropped.** The text is held in a dialog until you
+dismiss it, with a button to deliver it to the original target — which the
+retry activates for you, so moving away mid-transcription costs a click rather
+than the dictation. This replaced a four-second notice that vanished on its
+own: the paste is blocked exactly when your attention has moved elsewhere,
+which is exactly when a transient message is least likely to be seen.
 
 An anchor is the deliberate exception: it activates its target and restores the
 text field first, which is the whole point of anchoring.

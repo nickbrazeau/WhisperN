@@ -337,6 +337,52 @@ local function paste(explicit, done)
   return sendPaste(app, nil, done)
 end
 
+-- ---------------------------------------------------------------- fallback
+
+-- A safe result that could not be delivered. Holds the text on screen until
+-- dismissed, and offers to deliver it again.
+--
+-- This exists because the previous behaviour lost work. A blocked paste showed
+-- a four-second alert and then vanished, leaving the text on the clipboard
+-- alone -- so looking away for a moment, or copying anything else before
+-- noticing, destroyed a dictation that had transcribed perfectly. The paste is
+-- blocked precisely when the user's attention has moved elsewhere, which is
+-- exactly when a transient notice is least likely to be seen. A modal is the
+-- right shape here for the same reason it is right for a review: it cannot
+-- scroll past.
+--
+-- Retrying activates the target rather than requiring it to be frontmost
+-- already, since this dialog has taken focus itself by then. `cursorTarget`
+-- still points at the application the recording started in, so the retry goes
+-- where the text was always meant to go.
+--
+-- The text is not written anywhere. Routing it into the desktop app's window
+-- would mean either a transcript on disk or an IPC channel, and CLAUDE.md
+-- §3.1 asks for neither; keeping it in this dialog keeps it in memory.
+local function showUndelivered(text, reason)
+  local body = table.concat({
+    text, "",
+    "Not pasted: " .. reason .. ".",
+    "Nothing was typed anywhere. The text is on the clipboard.",
+  }, "\n")
+
+  local _, destName = destinationApp()
+  if not destName then
+    hs.dialog.blockAlert("Not pasted — kept here so it is not lost",
+                         body, "OK — copied", "", "warning")
+    return
+  end
+
+  local pasteButton = "Paste into " .. destName
+  if hs.dialog.blockAlert("Not pasted — kept here so it is not lost",
+                          body, "Copy only", pasteButton, "warning") == pasteButton then
+    paste(true, function(status, detail)
+      hs.alert.show(status == "pasted" and ("Pasted → " .. detail)
+                    or ("Still not pasted: " .. detail .. " — on the clipboard"), 3)
+    end)
+  end
+end
+
 -- ---------------------------------------------------------------- review
 
 -- Review presentation. Deliberately modal and deliberately awkward: a result
@@ -412,8 +458,9 @@ local function process(path)
           if status == "pasted" then
             hs.alert.show("Pasted → " .. detail, 1.5)
           else
-            hs.alert.show("Copied, not pasted: " .. detail .. "\n\n"
-              .. (result.text or ""), 4)
+            -- Held on screen rather than announced and dropped: this is the
+            -- path where a good dictation used to be lost by looking away.
+            showUndelivered(result.text or "", detail)
           end
         end)
       end
