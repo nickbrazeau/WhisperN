@@ -93,6 +93,16 @@ local busy = false
 local tickTimer = nil
 local limitTimer = nil
 
+-- Holds the short timer between stopping ffmpeg and using the file.
+--
+-- Retained deliberately. An hs.timer that nothing references can be garbage
+-- collected before it fires, which is not theoretical: the load receipt below
+-- rewrote itself on one launch and not the next, from identical code. Here the
+-- cost of losing the timer is the whole dictation -- the transcription never
+-- starts and the recording just disappears -- or, on the short-take path, a
+-- temporary WAV that is never deleted.
+local pendingTimer = nil
+
 -- Where a paste would land.
 --
 -- `cursorTarget` is the application that was frontmost when recording started.
@@ -528,12 +538,12 @@ stopRecording = function()
 
   if held < MIN_RECORD then
     hs.alert.show("Too short", 1)
-    hs.timer.doAfter(0.4, function() os.remove(path) end)
+    pendingTimer = hs.timer.doAfter(0.4, function() os.remove(path) end)
     return
   end
 
   -- Give ffmpeg a moment to flush; it buffers the WAV until close.
-  hs.timer.doAfter(0.4, function() process(path) end)
+  pendingTimer = hs.timer.doAfter(0.4, function() process(path) end)
 end
 
 local function toggleRecording()
@@ -656,7 +666,7 @@ end
 writeReceipt()
 -- Again once the microphone has resolved, so the receipt shows the device
 -- actually in use rather than the "resolving" placeholder.
-hs.timer.doAfter(3, writeReceipt)
+M.receiptTimer = hs.timer.doAfter(3, writeReceipt)
 
 hs.alert.show("WhisperN ready — ⌘FN to record, ⌘⌃A to anchor", 2)
 
