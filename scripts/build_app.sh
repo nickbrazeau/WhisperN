@@ -72,6 +72,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>WhisperN records your dictation and transcribes it on this Mac. Audio is never uploaded and is deleted immediately after transcription.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>WhisperN needs to know which application you are typing into so it can paste your dictation there, and nowhere else.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>WhisperN runs from a folder in Documents: its code, speech model, and temporary audio live there. Nothing is uploaded.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>WhisperN does not use Apple's speech recognition. Transcription runs locally through whisper.cpp.</string>
 </dict>
@@ -80,20 +82,46 @@ PLIST
 echo "  plist     ${BUNDLE_ID} ${VERSION}"
 
 # ---------------------------------------------------------------- launcher
+# A compiled launcher, not a shell script. macOS guards ~/Documents per app
+# (TCC), and a bundle whose executable is a shell script is refused access
+# silently -- no prompt, the app just exits -- so a repo under ~/Documents
+# could never be granted. A native executable gets the normal "would like to
+# access files in your Documents folder" prompt, scoped to Documents only.
+#
+# It execs Python rather than spawning it, so the window, Dock icon, and
+# privacy grants all stay with WhisperN.app.
+#
 # stderr goes to a file because a bundled app has nowhere to print: without it
 # a Python traceback vanishes and the icon just bounces. Python tracebacks
 # carry file paths and exception text, never transcript content, and runtime/
 # is excluded from git (CLAUDE.md 3.1). Truncated each launch so nothing
 # accumulates.
-cat > "$APP/Contents/MacOS/WhisperN" <<LAUNCHER
-#!/bin/sh
-REPO="${REPO_ROOT}"
-mkdir -p "\$REPO/runtime/tmp"
-cd "\$REPO" || exit 1
-exec "\$REPO/.venv/bin/python" "\$REPO/scripts/whispern_app.py" \\
-     2> "\$REPO/runtime/tmp/app-stderr.log"
-LAUNCHER
-chmod +x "$APP/Contents/MacOS/WhisperN"
+LAUNCHER_SRC="$(mktemp -t whispern-launcher).swift"
+trap 'rm -f "$LAUNCHER_SRC"' EXIT
+cat > "$LAUNCHER_SRC" <<SWIFT
+import Foundation
+
+let repo = "${REPO_ROOT}"
+let fm = FileManager.default
+
+// First touch of the repo: this is where macOS asks for Documents access.
+guard fm.changeCurrentDirectoryPath(repo) else {
+    NSLog("WhisperN: cannot open %@ -- check Privacy & Security > Files and Folders", repo)
+    exit(1)
+}
+try? fm.createDirectory(atPath: repo + "/runtime/tmp", withIntermediateDirectories: true)
+let fd = open(repo + "/runtime/tmp/app-stderr.log", O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+if fd >= 0 { dup2(fd, 2); close(fd) }
+
+let python = repo + "/.venv/bin/python"
+var argv: [UnsafeMutablePointer<CChar>?] = [
+    strdup(python), strdup(repo + "/scripts/whispern_app.py"), nil,
+]
+execv(python, &argv)
+NSLog("WhisperN: exec %@ failed: %s", python, strerror(errno))
+exit(1)
+SWIFT
+swiftc -O -o "$APP/Contents/MacOS/WhisperN" "$LAUNCHER_SRC"
 echo "  launcher  -> $REPO_ROOT"
 
 # ---------------------------------------------------------------- sign
