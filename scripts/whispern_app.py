@@ -420,7 +420,20 @@ class WhisperNApp:
         self.orig_btn.pack(side="right", padx=(0, 6))
 
         # Cmd+W, replacing macOS's usual close-window meaning in this app only.
-        # "break" stops Tk from also treating it as a close request.
+        #
+        # A key binding alone is not enough: Tk's default Aqua menu bar owns
+        # Cmd+W as "Close" and handles it natively, before any binding runs,
+        # so the window closed and the binding never fired. Installing our own
+        # menu bar removes that default. The accelerator shown on the menu item
+        # is a label only in Tk, so the binding below still does the work and
+        # a keystroke toggles exactly once (verified with a synthetic Cmd+W).
+        menubar = tk.Menu(r)
+        dictation = tk.Menu(menubar, tearoff=0)
+        dictation.add_command(label="Start / Stop Recording",
+                              accelerator="Command-W", command=self.toggle)
+        dictation.add_command(label="Rewrite On / Off", command=self.toggle_rewrite)
+        menubar.add_cascade(label="Dictation", menu=dictation)
+        r.config(menu=menubar)
         for seq in ("<Command-w>", "<Command-W>"):
             r.bind(seq, lambda e: (self.toggle(), "break")[1])
         r.bind("<Escape>", lambda e: self.root.quit())
