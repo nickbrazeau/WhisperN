@@ -139,3 +139,22 @@ which is the wrong direction for this mode. Every hedge loss, in both models,
 is reported by `validate_rewrite` in the review view.
 
 `qwen2.5:32b` remains installed (19 GB); `ollama rm qwen2.5:32b` removes it.
+
+## Amendment (2026-10-07): guessed names, clinical content, Raw by default
+
+- **Guessed names.** `validate_rewrite` reports any drug or organism name in
+  the rewrite that the transcript does not contain, as a protected change.
+  This catches the model "correcting" a mangled name (`septicpene`) to a real
+  one (`cefepime`), which every earlier check missed because the new word is
+  a genuine drug. Whole vocabulary entries are matched; single-word entries
+  that are ordinary English ("water", "iron") are excluded, so a bare genus
+  that is also an English word goes unreported.
+- **Clinical content.** When the transcript has a route, dosing frequency,
+  dose, or a note-style phrase ("the patient", "denies", "on exam"), the
+  review view leads with "Looks clinical — use Raw for clinical notes". It is
+  a warning, not a block: the rewrite has already run, locally.
+- **Raw by default.** `rewrite.default_on: false`. Every launch starts in Raw,
+  the mode that is safe for everything; Rewrite is chosen per session.
+
+Re-running the 12 rewrite cases with these checks: same 9/12, no new flags on
+any email or research case, and no "looks clinical" warning on any of them.

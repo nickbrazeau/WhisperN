@@ -115,7 +115,10 @@ rewrite:
   #
   # Ollama runs from scripts/setup_ollama.sh: loopback only, OLLAMA_NO_CLOUD=1.
   enabled: true
-  default_on: true
+  # The app starts in Raw on every launch; switch to Rewrite per session.
+  # Rewrite mode's scope depends on the user choosing it, so the default is
+  # the mode that is safe for everything, clinical notes included.
+  default_on: false
   endpoint: http://127.0.0.1:11434
   model: qwen2.5:14b
   temperature: 0
