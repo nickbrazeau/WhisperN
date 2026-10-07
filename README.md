@@ -87,8 +87,9 @@ in it. `WhisperN.app` owns those grants alone. The bundle is a launcher, not a
 copy: it runs the Python out of this repo, so edits take effect on the next
 launch. Rebuild after moving the repo, because the launcher hardcodes its path.
 
-Space to start/stop. Safe results paste at the cursor; anything needing review
-is shown and must be pasted deliberately.
+⌘W (Cmd+W) to start/stop while the WhisperN window is focused. Safe results
+paste at the cursor; anything needing review is shown and must be pasted
+deliberately.
 
 Global hotkey, no window — [`hammerspoon/`](hammerspoon/README.md):
 

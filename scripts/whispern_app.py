@@ -343,7 +343,7 @@ class WhisperNApp:
         self.text.tag_configure("warn", foreground=AMBER)
         self.text.tag_configure("bad", foreground=RED)
         self.text.tag_configure("dim", foreground=MUTED)
-        self.text.insert("1.0", "Press Record, or hit Space.\n", "dim")
+        self.text.insert("1.0", "Press Record, or hit \u2318W.\n", "dim")
         self.text.configure(state="disabled")
 
         # --- actions ------------------------------------------------------
@@ -373,7 +373,10 @@ class WhisperNApp:
         )
         self.copy_btn.pack(side="right")
 
-        r.bind("<space>", lambda e: self.toggle())
+        # Cmd+W, replacing macOS's usual close-window meaning in this app only.
+        # "break" stops Tk from also treating it as a close request.
+        for seq in ("<Command-w>", "<Command-W>"):
+            r.bind(seq, lambda e: (self.toggle(), "break")[1])
         r.bind("<Escape>", lambda e: self.root.quit())
 
     def _update_paste_label(self) -> None:
