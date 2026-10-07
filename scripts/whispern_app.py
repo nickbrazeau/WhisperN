@@ -57,6 +57,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import font as tkfont
+from tkinter import ttk
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
@@ -69,21 +70,30 @@ from pipeline.dictation import DictationPipeline, Outcome  # noqa: E402
 from pipeline.polisher import LocalOnlyError, LocalPolisher  # noqa: E402
 from validation.validator import Validator  # noqa: E402
 
-BG      = "#1c1f26"
-PANEL   = "#252932"
-FG      = "#e6e8ec"
-MUTED   = "#8b91a0"
-GREEN   = "#4caf7d"
-AMBER   = "#d9a441"
-RED     = "#d15b5b"
-BLUE    = "#5b8fd1"
+# Duke palette (Duke University brand colours). Navy carries the chrome, Royal
+# the actions, and the work area is light so a transcript reads like a page.
+# Every text colour below clears WCAG AA (4.5:1) on the background it sits on.
+NAVY     = "#012169"   # Duke Navy Blue: header
+ROYAL    = "#00539B"   # Duke Royal Blue: primary action, accents
+SHALE    = "#0577B1"   # Shale Blue: hover on primary
+HATTERAS = "#E2E6ED"   # Hatteras: info strip, card borders, text on navy
+WHISPER  = "#F3F2F1"   # Whisper Gray: window background
+GINGER   = "#FCF7E5"   # Ginger Beer: warning wash
+DANDELION = "#FFD960"  # Dandelion: problem text on navy
+BAD_WASH = "#FBEDEB"
 
-# Record button. A shade deeper than BLUE so white text clears WCAG AA
-# (4.5:1); BLUE itself is too light to sit under white. Same hue family
-# (~215° against BLUE's ~214°), so it reads as the palette's blue rather than
-# a second one. DIM is that colour blended toward BG for the disabled state.
-BLUE_BTN     = "#4577bd"
-BLUE_BTN_DIM = "#2f476a"
+# Semantic names the rest of the file uses.
+BG      = WHISPER
+PANEL   = "#FFFFFF"
+FG      = "#262626"
+MUTED   = "#5F6368"
+GREEN   = "#1D6363"    # Duke Magnolia: success text
+AMBER   = "#9A5200"    # darkened Persimmon: warning text
+RED     = "#B3261E"
+BLUE    = ROYAL
+
+BLUE_BTN     = ROYAL
+BLUE_BTN_DIM = "#9DB3CE"
 
 # How often to sample which application is frontmost. Each sample costs one
 # osascript process (~60-80 ms of subprocess, not of this thread). Lower is
@@ -103,33 +113,71 @@ def _as_literal(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
-class EmbossedButton(tk.Label):
-    """A Label drawn as a raised button.
+class FlatButton(tk.Label):
+    """A Label drawn as a flat button, in "primary" or "secondary" style.
 
     macOS Aqua ignores -bg on tk.Button and substitutes its own native
-    control, which is why the Record button rendered light grey while the code
-    asked for PANEL. A Label honours -bg and -relief, so the press and
-    disabled behaviour a Button would give for free are wired here instead.
+    control, which rendered pale grey buttons with near-invisible text. A
+    Label honours its colours, so press, hover, and disabled behaviour are
+    wired here. `configure(state=..., bg=...)` keeps working as callers
+    expect: bg sets the enabled colour, and disabled always draws dimmed.
     """
 
-    def __init__(self, master, text: str, command, bg: str, **kw) -> None:
-        super().__init__(master, text=text, bg=bg, fg="#ffffff",
-                         relief="raised", bd=2, **kw)
+    STYLES = {
+        "primary":   dict(bg=ROYAL, fg="#FFFFFF", hover=SHALE,
+                          dis_bg=BLUE_BTN_DIM, dis_fg="#FFFFFF", border=ROYAL),
+        "secondary": dict(bg="#FFFFFF", fg=NAVY, hover=HATTERAS,
+                          dis_bg="#FFFFFF", dis_fg="#A8ADB4", border="#C4CBD6"),
+    }
+
+    def __init__(self, master, text: str, command, style: str = "primary", **kw) -> None:
+        st = dict(self.STYLES[style])
+        if "bg" in kw:
+            st["bg"] = kw.pop("bg")
+        self._st = st
+        self._enabled_flag = kw.pop("state", "normal") != "disabled"
+        super().__init__(master, text=text, cursor="hand2",
+                         highlightthickness=1, bd=0, **kw)
         self._command = command
         self.bind("<Button-1>", self._on_press)
         self.bind("<ButtonRelease-1>", self._on_release)
+        self.bind("<Enter>", lambda e: self._paint(hover=True))
+        self.bind("<Leave>", lambda e: self._paint())
+        self._paint()
 
-    def _enabled(self) -> bool:
-        return str(self.cget("state")) != "disabled"
+    def _paint(self, hover: bool = False) -> None:
+        st = self._st
+        if not self._enabled_flag:
+            bg, fg = st["dis_bg"], st["dis_fg"]
+        else:
+            bg, fg = (st["hover"] if hover else st["bg"]), st["fg"]
+        super().configure(bg=bg, fg=fg, activebackground=bg,
+                          highlightbackground=st["border"], highlightcolor=st["border"])
+
+    def configure(self, cnf=None, **kw):
+        if "bg" in kw:
+            self._st["bg"] = self._st["hover"] = kw.pop("bg")
+        if "state" in kw:
+            self._enabled_flag = kw.pop("state") != "disabled"
+        if cnf or kw:
+            super().configure(cnf, **kw)
+        self._paint()
+
+    config = configure
+
+    def cget(self, key):
+        if key == "state":
+            return "normal" if self._enabled_flag else "disabled"
+        return super().cget(key)
 
     def _on_press(self, _evt) -> None:
-        if self._enabled():
-            self.configure(relief="sunken")
+        if self._enabled_flag:
+            super().configure(bg=self._st["border"] if self._st["bg"] == "#FFFFFF" else NAVY)
 
     def _on_release(self, evt) -> None:
-        if not self._enabled():
+        if not self._enabled_flag:
             return
-        self.configure(relief="raised")
+        self._paint(hover=True)
         # Fire only if released inside, as a real button does -- dragging off
         # the widget is how you cancel a mis-click, and starting a recording
         # by accident is worth guarding against.
@@ -311,113 +359,134 @@ class WhisperNApp:
         r = self.root
         r.title("WhisperN")
         r.configure(bg=BG)
-        r.geometry("620x460")
-        r.minsize(520, 400)
+        r.geometry("700x640")
+        r.minsize(580, 500)
 
-        mono = tkfont.Font(family="SF Mono", size=13)
-        ui = tkfont.Font(family="SF Pro Text", size=12)
+        body = tkfont.Font(family="SF Pro Text", size=15)
+        ui = tkfont.Font(family="SF Pro Text", size=13)
+        ui_bold = tkfont.Font(family="SF Pro Text", size=13, weight="bold")
         small = tkfont.Font(family="SF Pro Text", size=11)
+        head = tkfont.Font(family="SF Pro Text", size=11, weight="bold")
+        brand = tkfont.Font(family="SF Pro Display", size=17, weight="bold")
+        big = tkfont.Font(family="SF Pro Text", size=15, weight="bold")
 
-        # --- mode indicator (CLAUDE.md §6 Phase 5.10) ---------------------
-        bar = tk.Frame(r, bg=PANEL, height=34)
+        # --- header: brand, mode switch, where audio comes from and goes ----
+        bar = tk.Frame(r, bg=NAVY, height=52)
         bar.pack(fill="x", side="top")
         bar.pack_propagate(False)
+        tk.Label(bar, text="WhisperN", bg=NAVY, fg="#FFFFFF", font=brand).pack(
+            side="left", padx=(16, 14))
 
-        pol = f"polish {self.model}" if self.polishing_on else "polish OFF"
-        pol_col = AMBER if self.polishing_on else GREEN
-        for text, col in (
-            (self.mode, FG), ("·", MUTED), (pol, pol_col),
-            ("·", MUTED), ("VAD ON", GREEN),
-        ):
-            tk.Label(bar, text=text, bg=PANEL, fg=col, font=small).pack(side="left", padx=6, pady=7)
-
-        # Rewrite switch. Lives in the mode bar because it IS the mode: what
+        # Rewrite switch. Lives in the header because it IS the mode: what
         # comes back is a different kind of text, so it must be visible before
-        # recording, not discovered after.
-        tk.Label(bar, text="·", bg=PANEL, fg=MUTED, font=small).pack(side="left", padx=6, pady=7)
-        self.rewrite_lbl = tk.Label(bar, text="", bg=PANEL, font=small, cursor="hand2")
-        self.rewrite_lbl.pack(side="left", padx=6, pady=7)
-        self.rewrite_lbl.bind("<Button-1>", lambda e: self.toggle_rewrite())
-        self._update_rewrite_label()
+        # recording, not discovered after. Two segments, so the current mode
+        # is always named rather than implied by one label's colour.
+        seg = tk.Frame(bar, bg=HATTERAS, padx=1, pady=1)
+        seg.pack(side="left", pady=12)
+        self.seg_raw = tk.Label(seg, text="  Raw  ", font=small, cursor="hand2", padx=8, pady=3)
+        self.seg_rw = tk.Label(seg, text="  Rewrite  ", font=small, cursor="hand2", padx=8, pady=3)
+        self.seg_raw.pack(side="left")
+        self.seg_rw.pack(side="left")
+        self.seg_raw.bind("<Button-1>", lambda e: self.set_rewrite(False))
+        self.seg_rw.bind("<Button-1>", lambda e: self.set_rewrite(True))
 
-        self.paste_lbl = tk.Label(bar, text="", bg=PANEL, fg=MUTED, font=small)
-        self.paste_lbl.pack(side="right", padx=10)
-        self._update_paste_label()
+        # Where a paste would land, and which microphone is live. Both visible
+        # before recording: a wrong target or a silent virtual driver must be
+        # caught before any text exists to misdirect.
+        self.target_lbl = tk.Label(bar, text="", bg=NAVY, font=small)
+        self.target_lbl.pack(side="right", padx=(6, 16))
+        self.mic_lbl = tk.Label(bar, text="", bg=NAVY, font=small)
+        self.mic_lbl.pack(side="right", padx=6)
 
-        # Where a paste would land. Visible before recording, so a wrong or
-        # missing target is caught before any text exists to misdirect.
-        self.target_lbl = tk.Label(bar, text="", bg=PANEL, fg=MUTED, font=small)
-        self.target_lbl.pack(side="right", padx=4)
-        self._update_target_label()
+        # --- mode strip (CLAUDE.md §6 Phase 5.10) --------------------------
+        strip = tk.Frame(r, bg=HATTERAS, height=28)
+        strip.pack(fill="x")
+        strip.pack_propagate(False)
+        self.mode_lbl = tk.Label(strip, text="", bg=HATTERAS, fg=NAVY, font=small)
+        self.mode_lbl.pack(side="left", padx=16)
+        self.paste_lbl = tk.Label(strip, text="", bg=HATTERAS, font=small)
+        self.paste_lbl.pack(side="right", padx=16)
 
-        # Which microphone is actually selected. Visible because the previous
-        # failure mode -- recording from a silent virtual driver -- was
-        # invisible until a dictation came back empty.
-        self.mic_lbl = tk.Label(bar, text="", bg=PANEL, fg=MUTED, font=small)
-        self.mic_lbl.pack(side="right", padx=4)
-        self._update_mic_label()
-
-        # --- status -------------------------------------------------------
-        self.status = tk.Label(r, text="Ready", bg=BG, fg=MUTED, font=ui)
-        self.status.pack(pady=(14, 6))
-
-        self.button = EmbossedButton(
-            r, text="●  Record", command=self.toggle, bg=BLUE_BTN,
-            font=ui, disabledforeground=MUTED, padx=26, pady=10,
+        # --- record ---------------------------------------------------------
+        top = tk.Frame(r, bg=BG)
+        top.pack(fill="x", pady=(16, 10))
+        self.status = tk.Label(top, text="Ready", bg=BG, fg=MUTED, font=ui)
+        self.status.pack()
+        self.button = FlatButton(
+            top, text="●   Record", command=self.toggle, style="primary",
+            font=big, padx=34, pady=12,
         )
-        self.button.pack(pady=(0, 12))
+        self.button.pack(pady=(8, 4))
+        tk.Label(top, text="⌘W to start or stop", bg=BG, fg=MUTED, font=small).pack()
 
-        # --- result -------------------------------------------------------
-        wrap = tk.Frame(r, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=14)
-
+        # --- result card ----------------------------------------------------
+        # Built before the action row but packed after it, so the buttons keep
+        # their place at the bottom when the window is short.
+        card = tk.Frame(r, bg=PANEL, highlightthickness=1,
+                        highlightbackground="#D5DAE3", highlightcolor="#D5DAE3")
         self.text = tk.Text(
-            wrap, bg=PANEL, fg=FG, font=mono, relief="flat", bd=0,
-            wrap="word", padx=12, pady=10, height=7,
+            card, bg=PANEL, fg=FG, font=body, relief="flat", bd=0,
+            wrap="word", padx=20, pady=16, height=8, spacing2=3,
             insertbackground=FG, highlightthickness=0,
+            selectbackground=HATTERAS, selectforeground=FG,
         )
-        self.text.pack(fill="both", expand=True)
-        self.text.tag_configure("warn", foreground=AMBER)
-        self.text.tag_configure("bad", foreground=RED)
-        self.text.tag_configure("dim", foreground=MUTED)
-        self.text.insert("1.0", "Press Record, or hit \u2318W.\n", "dim")
-        self.text.configure(state="disabled")
+        # The native Aqua scrollbar follows the system appearance, so in dark
+        # mode it drew a black bar down a white card. A styled clam scrollbar
+        # follows this palette instead.
+        style = ttk.Style(r)
+        style.theme_use("clam")
+        style.configure("Card.Vertical.TScrollbar", troughcolor=PANEL,
+                        background="#C4CBD6", bordercolor=PANEL, lightcolor="#C4CBD6",
+                        darkcolor="#C4CBD6", arrowcolor=MUTED, gripcount=0, arrowsize=12)
+        style.map("Card.Vertical.TScrollbar", background=[("active", ROYAL)])
+        scroll = ttk.Scrollbar(card, orient="vertical", command=self.text.yview,
+                               style="Card.Vertical.TScrollbar")
+        self.text.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.text.pack(side="left", fill="both", expand=True)
 
-        # --- actions ------------------------------------------------------
+        t = self.text.tag_configure
+        t("h", font=head, foreground=ROYAL, spacing1=4, spacing3=6)
+        t("h_bad", font=head, foreground=RED, spacing1=14, spacing3=4)
+        t("h_warn", font=head, foreground=AMBER, spacing1=14, spacing3=4)
+        t("h_dim", font=head, foreground=MUTED, spacing1=14, spacing3=4)
+        t("bad", foreground=RED, font=ui, lmargin1=4, lmargin2=20, spacing3=3)
+        t("warn", foreground=AMBER, font=ui, lmargin1=4, lmargin2=20, spacing3=3)
+        t("dim", foreground=MUTED, font=ui)
+        t("orig", foreground="#3C4043", font=ui, spacing2=2)
+        t("note", foreground=MUTED, font=small, spacing1=16)
+        self._show([("Press Record, or ⌘W, and speak.\n", "dim")])
+
+        # --- actions --------------------------------------------------------
         act = tk.Frame(r, bg=BG)
-        act.pack(fill="x", padx=14, pady=12)
+        act.pack(fill="x", side="bottom", padx=16, pady=(10, 14))
+        card.pack(fill="both", expand=True, padx=16)
 
         tk.Checkbutton(
             act, text="Auto-paste safe results", variable=self.auto_paste,
-            command=self._update_paste_label, bg=BG, fg=MUTED, font=small,
-            selectcolor=PANEL, activebackground=BG, activeforeground=FG,
+            command=self._update_paste_label, bg=BG, fg=FG, font=small,
+            activebackground=BG, activeforeground=FG,
             highlightthickness=0, bd=0,
         ).pack(side="left")
 
-        self.paste_btn = tk.Button(
-            act, text="Paste", command=self.paste_now, bg=PANEL, fg=FG,
-            font=small, relief="flat", bd=0, padx=16, pady=6,
-            activebackground=BLUE, activeforeground="#ffffff",
-            highlightthickness=0, state="disabled",
-        )
-        self.paste_btn.pack(side="right", padx=(6, 0))
-
-        self.copy_btn = tk.Button(
-            act, text="Copy", command=self.copy_now, bg=PANEL, fg=FG,
-            font=small, relief="flat", bd=0, padx=16, pady=6,
-            activebackground=BLUE, activeforeground="#ffffff",
-            highlightthickness=0, state="disabled",
-        )
+        self.paste_btn = FlatButton(act, text="Paste", command=self.paste_now,
+                                    style="primary", font=ui_bold, padx=20, pady=7,
+                                    state="disabled")
+        self.paste_btn.pack(side="right", padx=(8, 0))
+        self.copy_btn = FlatButton(act, text="Copy", command=self.copy_now,
+                                   style="secondary", font=ui, padx=16, pady=7,
+                                   state="disabled")
         self.copy_btn.pack(side="right")
-
         # Only enabled for a rewrite: the way back to exactly what was said.
-        self.orig_btn = tk.Button(
-            act, text="Paste original", command=self.paste_original, bg=PANEL,
-            fg=FG, font=small, relief="flat", bd=0, padx=16, pady=6,
-            activebackground=BLUE, activeforeground="#ffffff",
-            highlightthickness=0, state="disabled",
-        )
-        self.orig_btn.pack(side="right", padx=(0, 6))
+        self.orig_btn = FlatButton(act, text="Paste original", command=self.paste_original,
+                                   style="secondary", font=ui, padx=16, pady=7,
+                                   state="disabled")
+        self.orig_btn.pack(side="right", padx=(0, 8))
+
+        self._update_rewrite_label()
+        self._update_paste_label()
+        self._update_target_label()
+        self._update_mic_label()
 
         # Cmd+W, replacing macOS's usual close-window meaning in this app only.
         #
@@ -439,20 +508,29 @@ class WhisperNApp:
         r.bind("<Escape>", lambda e: self.root.quit())
 
     def toggle_rewrite(self) -> None:
-        if self.pipeline.rewriter is None:
+        self.set_rewrite(not self.rewrite_on)
+
+    def set_rewrite(self, on: bool) -> None:
+        if on and self.pipeline.rewriter is None:
             self.status.configure(text="Rewrite unavailable — no model configured", fg=AMBER)
             return
-        self.rewrite_on = not self.rewrite_on
+        self.rewrite_on = on
         self._update_rewrite_label()
 
     def _update_rewrite_label(self) -> None:
+        on = self.rewrite_on
+        sel = dict(bg="#FFFFFF", fg=NAVY)
+        off = dict(bg=NAVY, fg=HATTERAS)
+        self.seg_raw.configure(**(off if on else sel))
+        self.seg_rw.configure(**(sel if on else off))
         if self.pipeline.rewriter is None:
-            self.rewrite_lbl.configure(text="rewrite unavailable", fg=MUTED)
-        elif self.rewrite_on:
-            self.rewrite_lbl.configure(
-                text=f"REWRITE ON ({self.rewrite_model}) · email/research only", fg=AMBER)
+            self.seg_rw.configure(fg="#6F7FA8", cursor="arrow")
+        pol = f"polish {self.model}" if self.polishing_on else "polish off"
+        if on:
+            text = f"Rewrite · {self.rewrite_model} · email and research only"
         else:
-            self.rewrite_lbl.configure(text="rewrite off · click to enable", fg=GREEN)
+            text = f"Raw transcript · {self.mode} · {pol} · VAD on"
+        self.mode_lbl.configure(text=text)
 
     def _update_paste_label(self) -> None:
         on = self.auto_paste.get()
@@ -465,14 +543,14 @@ class WhisperNApp:
         t = self.focus.target
         self.target_lbl.configure(
             text=f"→ {t}" if t else "→ no target",
-            fg=MUTED if t else AMBER,
+            fg=HATTERAS if t else DANDELION,
         )
 
     def _update_mic_label(self) -> None:
         d = self.device
         self.mic_lbl.configure(
             text=f"🎙 {d.name}" if d else "🎙 resolving…",
-            fg=MUTED if d else AMBER,
+            fg=HATTERAS if d else DANDELION,
         )
 
     def _show(self, chunks: list[tuple[str, str]]) -> None:
@@ -568,7 +646,7 @@ class WhisperNApp:
         # Devices may have changed while recording; refresh for the next take.
         threading.Thread(target=self._refresh_device, daemon=True).start()
 
-        self.button.configure(text="●  Record", bg=BLUE_BTN_DIM, state="disabled")
+        self.button.configure(text="●   Record", bg=BLUE_BTN_DIM, state="disabled")
         rewrite = self.rewrite_on
         self.status.configure(
             text="Transcribing and rewriting…" if rewrite else "Transcribing…", fg=BLUE)
@@ -616,7 +694,7 @@ class WhisperNApp:
 
         if result.outcome is Outcome.NO_SPEECH:
             self.status.configure(text="No speech detected", fg=AMBER)
-            self._show([("Nothing was transcribed.\n\n", "warn"),
+            self._show([("NOTHING TRANSCRIBED\n", "h_warn"),
                         ("The voice-activity gate found no speech, so the model "
                          "was not run. This is deliberate: Whisper invents text "
                          "from silence.\n", "dim")])
@@ -633,9 +711,9 @@ class WhisperNApp:
 
         if result.outcome is Outcome.SAFE:
             self.status.configure(text=f"Safe · {result.transcribe_ms} ms", fg=GREEN)
-            chunks = [(text + "\n", "")]
+            chunks = [("TRANSCRIPT\n", "h"), (text + "\n", "")]
             if self.auto_paste.get():
-                chunks.append(("\nPasted.\n", "dim"))
+                chunks.append(("Pasted.\n", "note"))
             self._show(chunks)
             if self.auto_paste.get():
                 self.root.after(60, lambda: self._paste(text))
@@ -652,16 +730,16 @@ class WhisperNApp:
                  else "Rejected")
         self.status.configure(text=label, fg=AMBER if result.outcome is Outcome.REVIEW else RED)
 
-        chunks: list[tuple[str, str]] = [(text + "\n", "")]
+        chunks: list[tuple[str, str]] = [("TRANSCRIPT\n", "h"), (text + "\n", "")]
         if result.protected_changes:
-            chunks.append(("\nProtected changes\n", "bad"))
+            chunks.append(("PROTECTED CHANGES\n", "h_bad"))
             for c in result.protected_changes:
-                chunks.append((f"  ! [{c.category}] {c.detail}\n", "bad"))
+                chunks.append((f"•  [{c.category}] {c.detail}\n", "bad"))
         if result.warnings:
-            chunks.append(("\nWarnings\n", "warn"))
+            chunks.append(("WARNINGS\n", "h_warn"))
             for w in result.warnings:
-                chunks.append((f"  ~ {w}\n", "warn"))
-        chunks.append(("\nNot pasted. Read it, then Paste or Copy if correct.\n", "dim"))
+                chunks.append((f"•  {w}\n", "warn"))
+        chunks.append(("Not pasted. Read it, then Paste or Copy if correct.\n", "note"))
         self._show(chunks)
         self._copy(text)
 
@@ -671,19 +749,20 @@ class WhisperNApp:
         self.status.configure(text=f"Rewrite ready — review · {secs:.1f} s", fg=AMBER)
         self.orig_btn.configure(state="normal")
 
-        chunks: list[tuple[str, str]] = [(result.polished_text + "\n", "")]
+        chunks: list[tuple[str, str]] = [("REWRITE\n", "h"),
+                                         (result.polished_text + "\n", "")]
         if result.protected_changes:
-            chunks.append(("\nCheck these against what you said\n", "bad"))
+            chunks.append(("CHECK AGAINST WHAT YOU SAID\n", "h_bad"))
             for c in result.protected_changes:
-                chunks.append((f"  ! {c.detail}\n", "bad"))
+                chunks.append((f"•  {c.detail}\n", "bad"))
         if result.warnings:
-            chunks.append(("\nWarnings\n", "warn"))
+            chunks.append(("NOTES\n", "h_warn"))
             for w in result.warnings:
-                chunks.append((f"  ~ {w}\n", "warn"))
-        chunks.append(("\nOriginal transcript\n", "dim"))
-        chunks.append((result.raw_text + "\n", "dim"))
-        chunks.append(("\nNot pasted. Read the rewrite, then Paste — or Paste "
-                       "original.\n", "dim"))
+                chunks.append((f"•  {w}\n", "warn"))
+        chunks.append(("WHAT YOU SAID\n", "h_dim"))
+        chunks.append((result.raw_text + "\n", "orig"))
+        chunks.append(("Not pasted. Read the rewrite, then Paste — or Paste "
+                       "original.\n", "note"))
         self._show(chunks)
         self._copy(result.polished_text)
 
