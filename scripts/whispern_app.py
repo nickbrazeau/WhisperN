@@ -14,6 +14,12 @@ PASTE BEHAVIOUR, and why it is not uniform:
   rejected         never pasted automatically; the raw transcript is offered
   no_speech        nothing happens
 
+REWRITE MODE (ADR 0002, email and research only) sends the transcript to a
+local model that rewrites it as concise prose. Every rewrite is
+review_required: it is shown above the original transcript with any protected
+facts that moved, and pastes only on a click. "Paste original" is always
+offered beside it.
+
 "Safe" means no protected content changed. It does NOT mean every word is
 correct: named-entity accuracy is 62.5%, so roughly one distinctive drug or
 organism name in three is wrong (docs/validation-report.md §3.3). Read what you
@@ -241,6 +247,9 @@ class WhisperNApp:
         self.prefer_mic = cfg.get("recording.prefer_microphone", "headset")
         self.pause_music = cfg.get("recording.pause_music", "true").lower() == "true"
         self.auto_paste = tk.BooleanVar(value=True)
+        self.rewrite_model = cfg.get("rewrite.model", "")
+        self.rewrite_on = (cfg.get("rewrite.enabled", "false").lower() == "true"
+                           and cfg.get("rewrite.default_on", "false").lower() == "true")
 
         # Resolved by name, never cached as a bare index. Enumerating costs
         # 0.24-1.03 s, too variable to sit in front of a recording without
@@ -262,12 +271,31 @@ class WhisperNApp:
             except LocalOnlyError:
                 polisher = None
 
+        rewriter = None
+        if cfg.get("rewrite.enabled", "false").lower() == "true" and self.rewrite_model:
+            try:
+                rewriter = LocalPolisher(
+                    endpoint=cfg.get("rewrite.endpoint", "http://127.0.0.1:11434"),
+                    model=self.rewrite_model,
+                    prompt_path=str(REPO_ROOT / "prompts/eloquent_rewriter.md"),
+                    timeout_seconds=int(cfg.get("rewrite.timeout_seconds", "90")),
+                    keep_alive=cfg.get("rewrite.keep_alive", "30m"),
+                )
+            except LocalOnlyError:
+                rewriter = None
+        if rewriter is None:
+            self.rewrite_on = False
+        else:
+            # Load the model now so the first dictation does not pay for it.
+            threading.Thread(target=rewriter.warm, daemon=True).start()
+
         self.pipeline = DictationPipeline(
             repo_root=REPO_ROOT,
             prompt_file=REPO_ROOT / "runtime/tmp/asr_prompt_id.txt",
             polisher=polisher,
             validator=Validator.from_dictionaries(REPO_ROOT / "dictionaries", self.mode),
             mode=self.mode,
+            rewriter=rewriter,
         )
 
         # Must exist before _build_ui, which renders the current target.
@@ -302,6 +330,15 @@ class WhisperNApp:
             ("·", MUTED), ("VAD ON", GREEN),
         ):
             tk.Label(bar, text=text, bg=PANEL, fg=col, font=small).pack(side="left", padx=6, pady=7)
+
+        # Rewrite switch. Lives in the mode bar because it IS the mode: what
+        # comes back is a different kind of text, so it must be visible before
+        # recording, not discovered after.
+        tk.Label(bar, text="·", bg=PANEL, fg=MUTED, font=small).pack(side="left", padx=6, pady=7)
+        self.rewrite_lbl = tk.Label(bar, text="", bg=PANEL, font=small, cursor="hand2")
+        self.rewrite_lbl.pack(side="left", padx=6, pady=7)
+        self.rewrite_lbl.bind("<Button-1>", lambda e: self.toggle_rewrite())
+        self._update_rewrite_label()
 
         self.paste_lbl = tk.Label(bar, text="", bg=PANEL, fg=MUTED, font=small)
         self.paste_lbl.pack(side="right", padx=10)
@@ -373,11 +410,36 @@ class WhisperNApp:
         )
         self.copy_btn.pack(side="right")
 
+        # Only enabled for a rewrite: the way back to exactly what was said.
+        self.orig_btn = tk.Button(
+            act, text="Paste original", command=self.paste_original, bg=PANEL,
+            fg=FG, font=small, relief="flat", bd=0, padx=16, pady=6,
+            activebackground=BLUE, activeforeground="#ffffff",
+            highlightthickness=0, state="disabled",
+        )
+        self.orig_btn.pack(side="right", padx=(0, 6))
+
         # Cmd+W, replacing macOS's usual close-window meaning in this app only.
         # "break" stops Tk from also treating it as a close request.
         for seq in ("<Command-w>", "<Command-W>"):
             r.bind(seq, lambda e: (self.toggle(), "break")[1])
         r.bind("<Escape>", lambda e: self.root.quit())
+
+    def toggle_rewrite(self) -> None:
+        if self.pipeline.rewriter is None:
+            self.status.configure(text="Rewrite unavailable — no model configured", fg=AMBER)
+            return
+        self.rewrite_on = not self.rewrite_on
+        self._update_rewrite_label()
+
+    def _update_rewrite_label(self) -> None:
+        if self.pipeline.rewriter is None:
+            self.rewrite_lbl.configure(text="rewrite unavailable", fg=MUTED)
+        elif self.rewrite_on:
+            self.rewrite_lbl.configure(
+                text=f"REWRITE ON ({self.rewrite_model}) · email/research only", fg=AMBER)
+        else:
+            self.rewrite_lbl.configure(text="rewrite off · click to enable", fg=GREEN)
 
     def _update_paste_label(self) -> None:
         on = self.auto_paste.get()
@@ -472,6 +534,7 @@ class WhisperNApp:
         self._show([("Listening.\n", "dim")])
         self.copy_btn.configure(state="disabled")
         self.paste_btn.configure(state="disabled")
+        self.orig_btn.configure(state="disabled")
 
     def stop(self) -> None:
         if not self.proc:
@@ -493,17 +556,21 @@ class WhisperNApp:
         threading.Thread(target=self._refresh_device, daemon=True).start()
 
         self.button.configure(text="●  Record", bg=BLUE_BTN_DIM, state="disabled")
-        self.status.configure(text="Transcribing…", fg=BLUE)
+        rewrite = self.rewrite_on
+        self.status.configure(
+            text="Transcribing and rewriting…" if rewrite else "Transcribing…", fg=BLUE)
         self._show([("Working…\n", "dim")])
 
         # ffmpeg buffers the WAV until close; give it a moment, then run the
-        # pipeline off the UI thread.
-        threading.Thread(target=self._work, args=(self.audio_path,), daemon=True).start()
+        # pipeline off the UI thread. The rewrite choice is fixed here, at
+        # stop, so toggling while it works cannot change what comes back.
+        threading.Thread(target=self._work, args=(self.audio_path, rewrite),
+                         daemon=True).start()
 
-    def _work(self, path: Path) -> None:
+    def _work(self, path: Path, rewrite: bool = False) -> None:
         time.sleep(0.4)
         try:
-            result = self.pipeline.run(path)
+            result = self.pipeline.run(path, rewrite=rewrite)
             self.events.put(("done", result))
         except Exception as exc:  # noqa: BLE001
             self.events.put(("error", f"{type(exc).__name__}: {exc}"))
@@ -563,6 +630,10 @@ class WhisperNApp:
                 self._copy(text)
             return
 
+        if result.rewritten:
+            self._render_rewrite(result)
+            return
+
         # review_required / rejected: never auto-pasted, whatever the setting.
         label = ("Review required" if result.outcome is Outcome.REVIEW
                  else "Rejected")
@@ -581,6 +652,28 @@ class WhisperNApp:
         self._show(chunks)
         self._copy(text)
 
+    def _render_rewrite(self, result) -> None:
+        """Rewrite first, original beneath, then what moved. Never pasted here."""
+        secs = (result.transcribe_ms + result.polish_ms) / 1000
+        self.status.configure(text=f"Rewrite ready — review · {secs:.1f} s", fg=AMBER)
+        self.orig_btn.configure(state="normal")
+
+        chunks: list[tuple[str, str]] = [(result.polished_text + "\n", "")]
+        if result.protected_changes:
+            chunks.append(("\nCheck these against what you said\n", "bad"))
+            for c in result.protected_changes:
+                chunks.append((f"  ! {c.detail}\n", "bad"))
+        if result.warnings:
+            chunks.append(("\nWarnings\n", "warn"))
+            for w in result.warnings:
+                chunks.append((f"  ~ {w}\n", "warn"))
+        chunks.append(("\nOriginal transcript\n", "dim"))
+        chunks.append((result.raw_text + "\n", "dim"))
+        chunks.append(("\nNot pasted. Read the rewrite, then Paste — or Paste "
+                       "original.\n", "dim"))
+        self._show(chunks)
+        self._copy(result.polished_text)
+
     # ------------------------------------------------------------ clipboard
 
     @staticmethod
@@ -595,6 +688,10 @@ class WhisperNApp:
     def paste_now(self) -> None:
         if self.result:
             self._paste(self.result.text_to_use)
+
+    def paste_original(self) -> None:
+        if self.result and self.result.raw_text:
+            self._paste(self.result.raw_text)
 
     def _paste(self, text: str) -> None:
         """Copy, then send ⌘V to the application the user came from.
