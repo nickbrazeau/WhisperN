@@ -165,3 +165,53 @@ def test_pipeline_without_rewrite_flag_never_calls_rewriter(validator):
             raise AssertionError("rewriter called with rewrite off")
     res = pipeline_with(Exploding(), validator).run(Path("x.wav"))
     assert not res.rewritten
+
+
+# ---------------------------------------------------------------- names and scope
+
+def test_rewrite_that_guesses_a_drug_is_a_protected_change(validator):
+    # The ASR mangles a drug name; the model "fixes" it to a real one.
+    raw = "we should probably switch him to septicpene for the resistant isolates"
+    rw = "We should probably switch him to cefepime for the resistant isolates."
+    r = validator.validate_rewrite(raw, rw)
+    assert "medication 'cefepime' is in the rewrite but was not said" in details(r)
+
+
+def test_rewrite_that_supplies_an_organism_is_a_protected_change(validator):
+    r = validator.validate_rewrite("the cultures grew staff aureus",
+                                   "The cultures grew Staphylococcus aureus.")
+    assert "organism 'staphylococcus aureus'" in details(r)
+
+
+def test_drug_name_that_was_said_is_not_flagged(validator):
+    raw = "um the isolates were all susceptible to meropenem"
+    r = validator.validate_rewrite(raw, "All isolates were susceptible to meropenem.")
+    assert "meropenem" not in details(r)
+
+
+def test_ordinary_words_in_the_drug_list_are_not_names(validator):
+    # "water" and "iron" are FDA list entries and ordinary English.
+    raw = "remind me to pay the bill"
+    r = validator.validate_rewrite(raw, "Remind me to pay the water and iron bill.")
+    assert "medication" not in details(r)
+
+
+@pytest.mark.parametrize("raw", [
+    "continue cefazolin 2 grams IV every 8 hours",
+    "the patient denies fever or chills",
+    "start vancomycin 1 gram BID",
+])
+def test_clinical_dictation_in_rewrite_mode_is_warned(validator, raw):
+    r = validator.validate_rewrite(raw, raw.capitalize() + ".")
+    assert r.warnings and r.warnings[0].startswith("looks clinical")
+
+
+@pytest.mark.parametrize("raw", [
+    "we enrolled 412 patients across 6 sites",
+    "the isolates were all susceptible to meropenem",
+    "can you send me the slides from Tuesday",
+    "the hazard ratio was 1.3 with a confidence interval that crossed one",
+])
+def test_email_and_research_dictation_is_not_warned(validator, raw):
+    r = validator.validate_rewrite(raw, raw.capitalize() + ".")
+    assert not any(w.startswith("looks clinical") for w in r.warnings)

@@ -120,6 +120,9 @@ class Validator:
         # Built once. difflib over 13,000 words costs ~40 ms per flagged word,
         # which is fine on a review path but not per-construction-per-call.
         self._suggestion_index: dict[str, str] = {}
+        # Whole drug/organism entries, for spotting a name a rewrite brought
+        # in. Built lazily by _name_vocab().
+        self._names: dict[str, str] | None = None
 
     @staticmethod
     def _split_words(terms: set[str]) -> set[str]:
@@ -489,6 +492,75 @@ class Validator:
 
     # -- rewrite mode (ADR 0002) -------------------------------------------
 
+    def _name_vocab(self) -> dict[str, str]:
+        """Map each usable drug/organism entry to "medication" or "organism".
+
+        Whole entries, never their parts: split into words, the FDA list
+        contributes "machine", "gentle", and "water". Multi-word entries
+        ("staphylococcus aureus") are always used. Single-word entries are
+        used only when they are not ordinary English, so "cefepime" counts and
+        "iron" or "oxygen" do not -- the price is that a bare genus that is
+        also an English word ("staphylococcus") goes unreported.
+        """
+        if self._names is None:
+            english: set[str] = set()
+            if self._SYSTEM_WORDS.exists():
+                english = {w.strip().lower() for w in self._SYSTEM_WORDS.read_text(
+                    encoding="utf-8", errors="replace").splitlines()}
+            names: dict[str, str] = {}
+            for kind, terms in (("organism", self.organisms), ("medication", self.medications)):
+                for term in terms:
+                    t = " ".join(term.lower().split())
+                    if len(t) < 5 or (" " not in t and t in english):
+                        continue
+                    names.setdefault(t, kind)
+            self._names = names
+        return self._names
+
+    def names_in(self, text: str) -> dict[str, str]:
+        """Drug and organism names in `text`, as {name: kind}. Up to 4 words."""
+        vocab = self._name_vocab()
+        words = re.findall(r"[a-z0-9][a-z0-9'-]*", text.lower())
+        found: dict[str, str] = {}
+        for n in range(1, 5):
+            for i in range(len(words) - n + 1):
+                gram = " ".join(words[i:i + n])
+                if gram in vocab:
+                    found[gram] = vocab[gram]
+        return found
+
+    # Phrases that belong to a clinical note rather than an email or a paper.
+    # Kept narrow on purpose: research dictation about antibiotics and
+    # patients-as-participants must not trip it, or the warning is noise.
+    _CLINICAL_PHRASES = re.compile(
+        r"\b(the patient|pt\b|patient (?:reports|states|denies|presents)|denies|"
+        r"on exam|physical exam|chief complaint|history of present illness|"
+        r"assessment and plan|vital signs|date of birth|dob\b|mrn\b|"
+        r"medical record number)\b", re.IGNORECASE)
+    _DOSE = re.compile(
+        r"\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|grams?|milligrams?|micrograms?|units?|"
+        r"meq|ml|milliliters?)\b", re.IGNORECASE)
+
+    def clinical_signals(self, text: str) -> list[str]:
+        """Why `text` looks like clinical documentation, or [] if it does not.
+
+        Rewrite mode is for email and research only (ADR 0002). This cannot
+        enforce that -- it is a check on wording, not on intent -- but it can
+        say so when a dictation reads like a note.
+        """
+        signals: list[str] = []
+        cats = {t.category for t in extract_all(text)}
+        if Category.ROUTE in cats:
+            signals.append("route")
+        if Category.FREQUENCY in cats:
+            signals.append("dosing frequency")
+        if self._DOSE.search(text):
+            signals.append("dose")
+        m = self._CLINICAL_PHRASES.search(text)
+        if m:
+            signals.append(f'"{m.group(0).lower()}"')
+        return signals
+
     def validate_rewrite(self, raw_text: str, rewritten: str) -> ValidationResult:
         """Check an email/research rewrite against the raw transcript.
 
@@ -561,6 +633,26 @@ class Validator:
                 "rewrite contains capitalised words that were not said "
                 f"(check for invented names): {', '.join(new_names)}"
             )
+
+        # Drug and organism names the rewrite has that the transcript does
+        # not. This is the dangerous rewrite: the ASR mangles "cefepime" to
+        # "septicpene", and the model "fixes" it to whichever real drug it
+        # finds closest. Every other check passes, because the new word is a
+        # real one. Reported as a protected change, not a note.
+        raw_names = self.names_in(raw_text)
+        for name, kind in sorted(self.names_in(rewritten).items()):
+            if name not in raw_names and not any(name in r for r in raw_names):
+                changes.append(ProtectedChange(
+                    kind, "(absent)", name,
+                    f"{kind} '{name}' is in the rewrite but was not said -- "
+                    f"the model may have guessed a name",
+                ))
+
+        signals = self.clinical_signals(raw_text)
+        if signals:
+            warnings.insert(0,
+                "looks clinical (" + ", ".join(signals) + "): rewrite mode is "
+                "for email and research only. Use Raw for clinical notes.")
 
         introduced = self.unknown_medication_like(raw_text, rewritten)
         if introduced:
