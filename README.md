@@ -26,6 +26,7 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 6 | Synthetic medical test suite | Complete — [gate passed](docs/phase6-results.md); named-entity accuracy 62.5% |
 | 7 | Offline and privacy verification | Complete — [16/16 checks](docs/validation-report.md) |
 | 8 | Deployment | Checklist complete — [guide](docs/deployment.md); glossary reviewed 2026-07-27 |
+| — | Email/research rewrite mode | Added 2026-10-07 — [ADR 0002](docs/decisions/0002-email-research-rewrite-mode.md); always click-to-paste |
 
 **Usable for raw-transcript dictation. Read what it pastes.**
 `scripts/dictate.py` records, gates on voice activity, transcribes, validates,
@@ -87,9 +88,33 @@ in it. `WhisperN.app` owns those grants alone. The bundle is a launcher, not a
 copy: it runs the Python out of this repo, so edits take effect on the next
 launch. Rebuild after moving the repo, because the launcher hardcodes its path.
 
+**Running from `~/Documents`.** macOS guards Documents per app, separately
+from file permissions, so `chmod` does not help. The first launch asks
+"WhisperN would like to access files in your Documents folder"; click Allow.
+That needs the compiled launcher `build_app.sh` produces, because a
+shell-script launcher is refused silently. Each rebuild re-signs the app
+ad hoc and can invalidate earlier grants. If the app then exits at once
+with no window, reset its grants and allow again:
+
+```bash
+tccutil reset All local.whispern && open -a WhisperN
+```
+
 ⌘W (Cmd+W) to start/stop while the WhisperN window is focused. Safe results
 paste at the cursor; anything needing review is shown and must be pasted
 deliberately.
+
+**Rewrite mode (email and research only).** Click the **REWRITE** switch in the
+mode bar. A local model rewrites the dictation as concise, professional prose,
+shown above the original transcript, and nothing pastes until you click
+**Paste** or **Paste original**. Never use it for clinical notes
+([ADR 0002](docs/decisions/0002-email-research-rewrite-mode.md)). One-time setup:
+
+```bash
+brew install ollama
+scripts/setup_ollama.sh          # loopback-only login service, cloud features off
+ollama pull qwen2.5:14b          # ~9 GB, needs network once
+```
 
 Global hotkey, no window — [`hammerspoon/`](hammerspoon/README.md):
 

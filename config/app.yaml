@@ -98,6 +98,33 @@ polishing:
   # model-specific -- but re-measure when adding a model rather than assuming.
   send_glossary: false
 
+rewrite:
+  # Email/research rewrite mode -- ADR 0002, decided 2026-10-07.
+  #
+  # Turns rambling dictation into concise, professional prose. SEPARATE from
+  # `polishing` above, which stays disabled: that is the constrained clinical
+  # editor, and this is a free rewrite whose wording changes by design.
+  #
+  #   scope    email and research dictation only. Never clinical notes or
+  #            patient data (owner decision, ADR 0002).
+  #   review   every rewrite needs an explicit click to paste. There is no
+  #            auto-paste path for a rewrite, whatever auto-paste is set to.
+  #   check    src/validation/validator.py validate_rewrite: protected facts
+  #            (negation, numbers, dates, hedging, laterality...) and new
+  #            names are compared, and the raw transcript is shown alongside.
+  #
+  # Ollama runs from scripts/setup_ollama.sh: loopback only, OLLAMA_NO_CLOUD=1.
+  enabled: true
+  default_on: true
+  endpoint: http://127.0.0.1:11434
+  model: qwen2.5:14b
+  temperature: 0
+  # Generous because a long ramble produces a long rewrite, and a model
+  # loaded cold costs several seconds before the first token.
+  timeout_seconds: 90
+  keep_alive: 30m
+  cloud_fallback: false
+
 validation:
   protect_negation: true
   protect_numbers: true

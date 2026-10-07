@@ -63,6 +63,22 @@ The polishing step may improve spelling, punctuation, capitalization, paragraphi
 
 When uncertain, preserve the raw wording and add a review flag.
 
+#### 3.2.1 Exception: email/research rewrite mode
+
+[ADR 0002](docs/decisions/0002-email-research-rewrite-mode.md) adds a separate
+**rewrite mode** that may make dictation concise and professional, which the
+rules above forbid for clinical text. It is permitted only under all of these:
+
+- Email and research dictation only. Never clinical notes or patient data.
+- A local model only (loopback Ollama with `OLLAMA_NO_CLOUD=1`).
+- Every rewrite is `review_required` and pastes only on an explicit click; the
+  original transcript is shown beside it with a "Paste original" option.
+- `Validator.validate_rewrite` reports protected facts (negation, numbers,
+  dates, hedging, attribution, laterality) that were dropped or added, and any
+  names that were not said.
+- The rewrite must still not add facts, drop substantive points, or change
+  certainty. Those remain defects, tested by `rewrite_cases.yaml`.
+
 ### 3.3 Human review
 
 - Keep the raw transcript available until the user accepts the polished text.
