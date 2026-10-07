@@ -749,15 +749,24 @@ class WhisperNApp:
         self.status.configure(text=f"Rewrite ready — review · {secs:.1f} s", fg=AMBER)
         self.orig_btn.configure(state="normal")
 
-        chunks: list[tuple[str, str]] = [("REWRITE\n", "h"),
-                                         (result.polished_text + "\n", "")]
+        # Rewrite mode is for email and research only (ADR 0002). When the
+        # dictation reads like a clinical note, say so before anything else.
+        clinical = [w for w in result.warnings if w.startswith("looks clinical")]
+        notes = [w for w in result.warnings if not w.startswith("looks clinical")]
+        chunks: list[tuple[str, str]] = []
+        if clinical:
+            self.status.configure(text="Looks clinical — use Raw", fg=RED)
+            chunks.append(("LOOKS CLINICAL — USE RAW FOR CLINICAL NOTES\n", "h_bad"))
+            for w in clinical:
+                chunks.append((f"•  {w}\n", "bad"))
+        chunks += [("REWRITE\n", "h"), (result.polished_text + "\n", "")]
         if result.protected_changes:
             chunks.append(("CHECK AGAINST WHAT YOU SAID\n", "h_bad"))
             for c in result.protected_changes:
                 chunks.append((f"•  {c.detail}\n", "bad"))
-        if result.warnings:
+        if notes:
             chunks.append(("NOTES\n", "h_warn"))
-            for w in result.warnings:
+            for w in notes:
                 chunks.append((f"•  {w}\n", "warn"))
         chunks.append(("WHAT YOU SAID\n", "h_dim"))
         chunks.append((result.raw_text + "\n", "orig"))
