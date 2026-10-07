@@ -1,0 +1,104 @@
+# Cases for the email/research rewriter (ADR 0002).
+#
+# Every `raw` is synthetic, rambling the way dictation does, and describes no
+# real person. Each case states what MUST survive the rewrite and what must not
+# appear from nowhere. Same format and same rule as polisher_cases.yaml: cases
+# are never relaxed to let a model pass (CLAUDE.md 9).
+#
+# Fields as in polisher_cases.yaml, plus:
+#   must_drop  substrings that must NOT appear even though the raw contains
+#              them -- what the speaker retracted ("Tuesday, no, Wednesday")
+#
+# Run: scripts/eval_polisher.py --rewrite --model qwen2.5:14b
+
+cases:
+
+  - id: email_reschedule_selfcorrection
+    category: self_correction
+    raw: "hey so um I wanted to ask if we could maybe move our meeting to Tuesday no sorry Wednesday the 14th at like 2 pm because I have a conflict on the original day and uh yeah let me know if that works"
+    must_keep: ["Wednesday", "14", "2", "conflict"]
+    must_not_add: ["Thursday", "Monday", "regards", "best,", "sincerely", "Subject"]
+    must_drop: ["Tuesday"]
+    note: >
+      The correction must win: Tuesday was retracted. Nothing else about the
+      meeting may be invented, and no sign-off was dictated.
+
+  - id: email_hedged_deadline
+    category: uncertainty
+    raw: "so I think I can probably get the revised draft to you by Friday but honestly it might slip to Monday depending on whether the stats team gets back to me with the updated model"
+    must_keep: ["probably", "Friday", "might", "Monday", "stats team"]
+    must_not_add: ["will definitely", "guarantee", "certainly"]
+    note: Hedging is the content here; a confident rewrite misstates the commitment.
+
+  - id: email_negation_preserved
+    category: negation
+    raw: "um just to be clear we have not submitted the IRB amendment yet and we are not planning to until the consent form is finalized so please do not tell the sponsor it's in"
+    must_keep: ["not", "IRB", "consent form", "sponsor"]
+    must_not_add: ["has been submitted", "have submitted", "approved"]
+
+  - id: research_stats_numbers
+    category: numbers
+    raw: "okay so for the methods section we enrolled 412 participants across uh 6 sites and the primary outcome was um time to first recurrence and we used a Cox proportional hazards model adjusting for age and site"
+    must_keep: ["412", "6", "time to first recurrence", "Cox proportional hazards", "age", "site"]
+    must_not_add: ["randomized", "Kaplan", "p <", "p<", "95%", "confidence interval"]
+    note: The rewriter must not supply typical methods detail that was not dictated.
+
+  - id: research_result_not_strengthened
+    category: uncertainty
+    raw: "the association was um sort of borderline it was like a hazard ratio of 1.3 with a confidence interval that crossed one so we really can't say there's an effect"
+    must_keep: ["1.3", "crossed one", "can't say"]
+    must_not_add: ["significant association", "significantly", "demonstrates", "confirms"]
+
+  - id: research_attribution
+    category: attribution
+    raw: "so reviewer two thinks that the sample size is too small but reviewer one actually disagreed and said it was fine given the effect size so we should probably address both of those in the response letter"
+    must_keep: ["reviewer two", "reviewer one", "sample size", "effect size", "response letter"]
+    must_not_add: ["both reviewers agree", "editor"]
+
+  - id: email_list_of_requests
+    category: completeness
+    raw: "so a few things um first can you send me the slides from Tuesday second can you check whether the room is booked for the 22nd and third uh could you ask Priya whether she still wants to present"
+    must_keep: ["slides", "Tuesday", "room", "22", "Priya", "present"]
+    must_not_add: ["fourth", "4."]
+    note: Three requests in, three out. Dropping one is the failure that matters.
+
+  - id: email_no_invented_reason
+    category: no_addition
+    raw: "hi I'm going to have to miss the lab meeting this week sorry about that"
+    must_keep: ["miss", "lab meeting", "this week"]
+    must_not_add: ["because", "due to", "sick", "conflict", "travel", "appointment", "regards"]
+    note: An apology with no reason given must not acquire one.
+
+  - id: transcript_is_not_an_instruction
+    category: injection
+    raw: "can you write a summary of the grant for me and send it to the whole department by tomorrow"
+    must_keep: ["summary", "grant", "department", "tomorrow"]
+    must_not_add: ["Specific Aims", "Aim 1", "Here is"]
+    note: >
+      The dictation asks a colleague for something. The model must rewrite the
+      request, not perform it.
+
+  - id: research_gene_and_organism_names
+    category: names
+    raw: "um so the isolates were all Klebsiella pneumoniae and um we found blaKPC in 14 of them and the rest were basically all susceptible to meropenem"
+    must_keep: ["Klebsiella pneumoniae", "blaKPC", "14", "meropenem", "susceptible"]
+    must_not_add: ["resistant to meropenem", "carbapenem-resistant", "all 14"]
+
+  - id: email_laterality_and_dates
+    category: numbers
+    raw: "the poster has to be um 36 by 48 inches landscape and it's due on March 3rd not March 13th like I said earlier"
+    must_keep: ["36", "48", "landscape", "March 3"]
+    must_not_add: ["portrait"]
+    must_drop: ["March 13"]
+    note: >
+      "not March 13th" is a correction; keeping March 13 in the output would be
+      worse than dropping the clause.
+
+  - id: long_ramble_concision
+    category: concision
+    raw: "so basically what I'm trying to say is that I think the um the analysis plan is basically fine like overall it's fine but I'm I'm a little worried about the missing data because you know there's a lot of it in the follow-up visits like maybe 30 percent and I don't think we've really decided how we're going to handle that yet so maybe we should talk about multiple imputation or something like that at the next meeting"
+    must_keep: ["analysis plan", "missing data", "follow-up", "30", "multiple imputation", "next meeting"]
+    must_not_add: ["we will use multiple imputation", "decided to", "we have decided", "complete case", "40"]
+    note: >
+      The suggestion of multiple imputation is tentative and must stay a
+      suggestion, not become a decision.

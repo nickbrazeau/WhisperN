@@ -12,9 +12,15 @@ a real one.
 Per CLAUDE.md §9, cases are never relaxed to let a model pass. A model that
 fails is not approved.
 
+With --rewrite it evaluates the email/research rewriter instead (ADR 0002):
+prompts/eloquent_rewriter.md against rewrite_cases.yaml, and additionally
+reports what validate_rewrite would show the reader, and how much shorter the
+rewrite is.
+
 Usage:
   scripts/eval_polisher.py --model llama3.1:8b
   scripts/eval_polisher.py --model qwen2.5:14b --json
+  scripts/eval_polisher.py --rewrite --model qwen2.5:14b
 """
 
 from __future__ import annotations
@@ -51,7 +57,7 @@ def load_cases(path: Path) -> list[dict]:
             if current:
                 cases.append(current)
             current = {"id": stripped.split(":", 1)[1].strip(),
-                       "must_keep": [], "must_not_add": []}
+                       "must_keep": [], "must_not_add": [], "must_drop": []}
             list_key = None
             continue
         if current is None:
@@ -60,7 +66,7 @@ def load_cases(path: Path) -> list[dict]:
         m = re.match(r"^(\w+):\s*(.*)$", stripped)
         if m:
             key, val = m.group(1), m.group(2).strip()
-            if key in ("must_keep", "must_not_add"):
+            if key in ("must_keep", "must_not_add", "must_drop"):
                 if val.startswith("["):
                     items = [i.strip().strip('"\'')
                              for i in val.strip("[]").split(",") if i.strip()]
@@ -102,6 +108,11 @@ def check(case: dict, polished: str) -> list[str]:
         if n in p and n not in raw:
             violations.append(f"ADDED {needle!r}")
 
+    # Retracted by the speaker, so present in raw but must not survive.
+    for needle in case.get("must_drop", []):
+        if needle.lower() in p:
+            violations.append(f"KEPT RETRACTED {needle!r}")
+
     return violations
 
 
@@ -118,8 +129,18 @@ def main() -> int:
                     help="supply the glossary for this specialty (default: none). "
                          "Worth testing both ways: a glossary can induce the "
                          "model to 'correct' text toward nearby approved terms.")
+    ap.add_argument("--rewrite", action="store_true",
+                    help="evaluate the email/research rewriter (ADR 0002)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+
+    validator = None
+    if args.rewrite:
+        args.mode = "rewrite"
+        if args.cases.name == "polisher_cases.yaml":
+            args.cases = REPO_ROOT / "tests/fixtures/synthetic/rewrite_cases.yaml"
+        from validation.validator import Validator
+        validator = Validator.from_dictionaries(REPO_ROOT / "dictionaries")
 
     glossary: list[str] = []
     if args.glossary:
@@ -136,7 +157,8 @@ def main() -> int:
 
     polisher = LocalPolisher(
         endpoint=args.endpoint, model=args.model,
-        prompt_path=str(REPO_ROOT / "prompts" / "medical_polisher.md"),
+        prompt_path=str(REPO_ROOT / "prompts" /
+                        ("eloquent_rewriter.md" if args.rewrite else "medical_polisher.md")),
         timeout_seconds=args.timeout, retries=0,
     )
 
@@ -169,7 +191,18 @@ def main() -> int:
         })
 
         mark = "PASS" if status == "pass" else "FAIL"
-        print(f"[{mark}] {case['id']}  ({case.get('category','')})")
+        ratio = len(res.polished_text.split()) / max(1, len(case["raw"].split()))
+        results[-1]["word_ratio"] = round(ratio, 2)
+        extra = f"  words x{ratio:.2f}  {res.latency_ms} ms" if args.rewrite else ""
+        print(f"[{mark}] {case['id']}  ({case.get('category','')}){extra}")
+        if validator is not None:
+            v = validator.validate_rewrite(case["raw"], res.polished_text)
+            results[-1]["validator"] = [c.detail for c in v.protected_changes] + v.warnings
+            print(f"    rewrite  : {res.polished_text}")
+            for c in v.protected_changes:
+                print(f"    !  {c.detail}")
+            for w in v.warnings:
+                print(f"    ~  {w}")
         if violations:
             print(f"    raw      : {case['raw']}")
             print(f"    polished : {res.polished_text}")

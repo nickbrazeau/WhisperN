@@ -486,3 +486,105 @@ class Validator:
         return ValidationResult(
             Status.SAFE, raw_text, polished_text, changes, warnings
         )
+
+    # -- rewrite mode (ADR 0002) -------------------------------------------
+
+    def validate_rewrite(self, raw_text: str, rewritten: str) -> ValidationResult:
+        """Check an email/research rewrite against the raw transcript.
+
+        A rewrite changes wording and drops words by design, so `validate`
+        would reject every one: it forbids new words and counts each "no".
+        This check asks a narrower question -- did every protected fact
+        survive, and did any appear from nowhere? -- and answers it by
+        presence rather than count, because "no fever and no chills" becoming
+        "no fever or chills" loses a word, not a fact.
+
+        It NEVER returns SAFE. A concise rewrite is by definition not a
+        faithful copy, so a person approves every one (ADR 0002). What this
+        decides is what that person is shown first.
+
+        The dropped-fact check is a floor, not a guarantee: it sees the
+        protected categories in `protected.py` and proper names. A dropped
+        request or question with none of those in it is caught only by the
+        reader, which is why the raw transcript is shown beside the rewrite.
+        """
+        warnings: list[str] = []
+        changes: list[ProtectedChange] = []
+
+        if not rewritten or not rewritten.strip():
+            return ValidationResult(
+                Status.REJECTED, raw_text, rewritten,
+                warnings=["rewrite is empty"],
+            )
+
+        raw_counts = counts_by_category(extract_all(raw_text))
+        new_counts = counts_by_category(extract_all(rewritten))
+        for category in sorted(set(raw_counts) | set(new_counts), key=lambda c: c.value):
+            rv = set(raw_counts.get(category, {}))
+            nv = set(new_counts.get(category, {}))
+            for value in sorted(rv - nv):
+                changes.append(ProtectedChange(
+                    category.value, value, "(absent)",
+                    f"{category.value} {value!r} is in the transcript but not "
+                    f"in the rewrite",
+                ))
+            for value in sorted(nv - rv):
+                changes.append(ProtectedChange(
+                    category.value, "(absent)", value,
+                    f"{category.value} {value!r} is in the rewrite but was "
+                    f"not said",
+                ))
+
+        # Proper names the speaker never said. Capitalised words that are not
+        # the first word of a sentence are names far more often than not, and
+        # an invented name -- a colleague, a journal, an institution -- is
+        # the most plausible-looking fabrication a rewrite can produce.
+        # A sentence-initial capital proves nothing, so there the word is
+        # reported only if it is not ordinary English -- otherwise "Dr. Patel"
+        # would hide behind the full stop of "Dr.".
+        raw_lower = {w.lower() for w in re.findall(r"[A-Za-z][A-Za-z'-]*", raw_text)}
+        new_names: set[str] = set()
+        for m in re.finditer(r"\b[A-Z][a-zA-Z'-]*", rewritten):
+            word = m.group()
+            if word.lower() in raw_lower:
+                continue
+            before = rewritten[:m.start()].rstrip(" \t\"'(")
+            sentence_start = (not before or before[-1] in ".!?:\n") and not (
+                re.search(r"\b(?:dr|mr|mrs|ms|prof|st|vs|etc|e\.g|i\.e)\.$",
+                          before, re.IGNORECASE))
+            if sentence_start and self._is_known(word):
+                continue
+            new_names.add(word)
+        new_names = sorted(new_names)
+        if new_names:
+            warnings.append(
+                "rewrite contains capitalised words that were not said "
+                f"(check for invented names): {', '.join(new_names)}"
+            )
+
+        introduced = self.unknown_medication_like(raw_text, rewritten)
+        if introduced:
+            warnings.append(
+                "rewrite introduced unrecognised words absent from the "
+                f"transcript: {', '.join(sorted(set(introduced)))}"
+            )
+
+        unknown_raw = self.unknown_names_in_raw(raw_text)
+        if unknown_raw:
+            warnings.append(
+                "transcript contains unrecognised words (probable "
+                f"speech-recognition error): {', '.join(sorted(set(unknown_raw)))}"
+            )
+
+        raw_words = len(raw_text.split())
+        new_words = len(rewritten.split())
+        if raw_words and new_words > raw_words * 1.15:
+            warnings.append(
+                f"rewrite is longer than the transcript ({raw_words} -> "
+                f"{new_words} words); concision should not add length, so "
+                f"check for added content"
+            )
+
+        return ValidationResult(
+            Status.REVIEW, raw_text, rewritten, changes, warnings
+        )

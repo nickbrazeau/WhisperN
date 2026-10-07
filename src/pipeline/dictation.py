@@ -52,11 +52,18 @@ class DictationResult:
     error: str | None = None
     transcribe_ms: int = 0
     polish_ms: int = 0
+    # True when polished_text is an email/research rewrite (ADR 0002). A
+    # rewrite is always REVIEW, and is what gets pasted once approved.
+    rewritten: bool = False
 
     @property
     def text_to_use(self) -> str:
         """The only text a caller should ever paste or display as the result."""
-        return self.polished_text if self.outcome is Outcome.SAFE else self.raw_text
+        if self.outcome is Outcome.SAFE:
+            return self.polished_text
+        if self.rewritten and self.outcome is Outcome.REVIEW:
+            return self.polished_text
+        return self.raw_text
 
 
 class DictationPipeline:
@@ -71,6 +78,7 @@ class DictationPipeline:
         validator=None,
         mode: str = "clinical_strict",
         use_vad: bool = True,
+        rewriter: LocalPolisher | None = None,
     ) -> None:
         self.repo_root = repo_root
         self.whisper_bin = whisper_bin or repo_root / "whisper.cpp/build/bin/whisper-cli"
@@ -81,6 +89,7 @@ class DictationPipeline:
         self.validator = validator
         self.mode = mode
         self.use_vad = use_vad
+        self.rewriter = rewriter
 
     # -- stage 1: transcription with the VAD gate --------------------------
 
@@ -161,7 +170,8 @@ class DictationPipeline:
 
     # -- full pipeline -----------------------------------------------------
 
-    def run(self, audio: Path, glossary: list[str] | None = None) -> DictationResult:
+    def run(self, audio: Path, glossary: list[str] | None = None,
+            rewrite: bool = False) -> DictationResult:
         try:
             raw, t_ms = self.transcribe(audio)
         except subprocess.CalledProcessError as exc:
@@ -176,6 +186,9 @@ class DictationPipeline:
             return DictationResult(Outcome.NO_SPEECH, transcribe_ms=t_ms)
 
         raw = normalize_transcript(raw)
+
+        if rewrite:
+            return self._rewrite(raw, t_ms)
 
         # Polishing disabled or unavailable: the raw transcript is the result.
         # It still goes through validation so that unrecognised drug names in
@@ -205,6 +218,49 @@ class DictationPipeline:
             warnings=v.warnings,
             transcribe_ms=t_ms,
             polish_ms=result.latency_ms,
+        )
+
+    def _rewrite(self, raw: str, t_ms: int) -> DictationResult:
+        """Email/research rewrite (ADR 0002). Every outcome needs a click.
+
+        On any failure the raw transcript comes back as REVIEW rather than
+        SAFE: the speaker asked for a rewrite, and auto-pasting the rambling
+        original instead would be a surprise they did not approve.
+        """
+        def raw_for_review(why: str) -> DictationResult:
+            out = self._validate_only(raw, t_ms)
+            out.outcome = Outcome.REVIEW
+            out.warnings = [why] + out.warnings
+            return out
+
+        if self.rewriter is None:
+            return raw_for_review("rewrite unavailable: no rewrite model configured")
+
+        result: PolishResult = self.rewriter.polish(raw, [], "rewrite")
+        if not result.ok:
+            out = raw_for_review(f"rewrite unavailable: {result.error}")
+            out.polish_ms = result.latency_ms
+            return out
+        if self.validator is None:
+            return DictationResult(
+                Outcome.REVIEW, raw_text=raw, polished_text=result.polished_text,
+                warnings=["no validator configured"], transcribe_ms=t_ms,
+                polish_ms=result.latency_ms, rewritten=True,
+            )
+
+        v = self.validator.validate_rewrite(raw, result.polished_text)
+        warnings = list(v.warnings)
+        for f in result.flags:
+            warnings.append(f"model was unsure about: {f.raw_span!r}")
+        return DictationResult(
+            outcome=Outcome(v.status.value),
+            raw_text=raw,
+            polished_text=result.polished_text,
+            protected_changes=v.protected_changes,
+            warnings=warnings,
+            transcribe_ms=t_ms,
+            polish_ms=result.latency_ms,
+            rewritten=v.status.value == Outcome.REVIEW.value,
         )
 
     def _validate_only(self, raw: str, t_ms: int) -> DictationResult:
