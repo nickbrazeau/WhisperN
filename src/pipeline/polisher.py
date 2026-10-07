@@ -47,7 +47,9 @@ _VALID_FLAG_REASONS = {
 }
 _VALID_BASES = {"glossary", "exact_replacement", "punctuation_only"}
 
-VALID_MODES = {"general", "medical", "clinical_strict", "research", "email"}
+# "rewrite" is the email/research mode of ADR 0002: concise, eloquent prose
+# rather than a constrained edit. It uses prompts/eloquent_rewriter.md.
+VALID_MODES = {"general", "medical", "clinical_strict", "research", "email", "rewrite"}
 
 
 class LocalOnlyError(RuntimeError):
@@ -125,6 +127,27 @@ def _assert_local_endpoint(endpoint: str) -> None:
         raise LocalOnlyError(
             f"endpoint {host!r} is not loopback. Cloud and LAN endpoints are "
             "not permitted (CLAUDE.md 3.1)."
+        )
+
+
+def _assert_local_model(model: str) -> None:
+    """Refuse Ollama model names that are served from Ollama's cloud.
+
+    A loopback endpoint is not enough on its own. Recent Ollama releases can
+    run "cloud" models: the request goes to the local server, which forwards
+    the prompt to ollama.com. Those models are named with a "-cloud" or
+    ":cloud" suffix, so a config edit alone could send transcript text off
+    the machine through an endpoint that passes the loopback check.
+    """
+    name = model.strip().lower()
+    if not name:
+        raise LocalOnlyError("model name is empty")
+    tag = name.rsplit(":", 1)[-1] if ":" in name else ""
+    if name.endswith("-cloud") or tag == "cloud" or tag.endswith("-cloud"):
+        raise LocalOnlyError(
+            f"model {model!r} is an Ollama cloud model, which forwards prompts "
+            "to a remote service. Only locally stored models are permitted "
+            "(CLAUDE.md 3.1)."
         )
 
 
@@ -217,8 +240,10 @@ class LocalPolisher:
         timeout_seconds: int = 20,
         retries: int = 0,
         temperature: float = 0.0,
+        keep_alive: str | None = None,
     ) -> None:
         _assert_local_endpoint(endpoint)
+        _assert_local_model(model)
         if retries < 0:
             raise ValueError("retries must be >= 0")
         if timeout_seconds <= 0:
@@ -229,6 +254,10 @@ class LocalPolisher:
         self.timeout = timeout_seconds
         self.retries = retries
         self.temperature = temperature
+        # How long Ollama keeps the model resident after a request. None leaves
+        # Ollama's default (5 min). Rewrite mode sets it longer, because a cold
+        # load of a 14B model costs seconds on every dictation after a pause.
+        self.keep_alive = keep_alive
         self.system_prompt = self._load_prompt(prompt_path)
 
     @staticmethod
@@ -254,6 +283,35 @@ class LocalPolisher:
         parts.append(raw_text)
         return "\n\n".join(parts)
 
+    def _opener(self) -> urllib.request.OpenerDirector:
+        # No proxy handler: a system proxy could route loopback-looking
+        # traffic off-machine.
+        return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def warm(self) -> bool:
+        """Load the model into memory without generating anything.
+
+        Sends no text: an Ollama generate request with no prompt only loads
+        the model. Returns False on any failure, which callers may ignore --
+        the first real request then pays the load time instead.
+        """
+        payload = {"model": self.model}
+        if self.keep_alive:
+            payload["keep_alive"] = self.keep_alive
+        req = urllib.request.Request(
+            f"{self.endpoint}/api/generate",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with self._opener().open(req, timeout=max(self.timeout, 120)) as resp:
+                resp.read()
+            return True
+        except Exception as exc:  # noqa: BLE001 - warming is best effort
+            log.warning("model warm-up failed: %s", type(exc).__name__)
+            return False
+
     def polish(self, raw_text: str, glossary: list[str], mode: str) -> PolishResult:
         """Polish `raw_text`. Never raises; failures return a failed result."""
         if mode not in VALID_MODES:
@@ -272,6 +330,7 @@ class LocalPolisher:
             ],
             "stream": False,
             "format": "json",
+            **({"keep_alive": self.keep_alive} if self.keep_alive else {}),
             "options": {
                 "temperature": self.temperature,
                 "top_p": 1.0,
@@ -291,10 +350,7 @@ class LocalPolisher:
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
-                # No proxy handler: a system proxy could route loopback-looking
-                # traffic off-machine.
-                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-                with opener.open(req, timeout=self.timeout) as resp:
+                with self._opener().open(req, timeout=self.timeout) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
 
                 content = (data.get("message") or {}).get("content", "")

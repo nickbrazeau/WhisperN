@@ -284,6 +284,86 @@ else
 fi
 
 # --------------------------------------------------------------------------
+say ""; say "## 9a. Rewrite runtime (ADR 0002)"; say ""
+# --------------------------------------------------------------------------
+# The network sandbox above denies loopback too, so it cannot host a call to
+# Ollama. These checks observe the real server instead.
+OLLAMA_PLIST="$HOME/Library/LaunchAgents/local.whispern.ollama.plist"
+OLLAMA_LOG="$HOME/Library/Logs/whispern-ollama.log"
+LISTEN=$(lsof -nP -iTCP:11434 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $9}' | sort -u)
+if [ -z "$LISTEN" ]; then
+    warn "ollama not running; rewrite runtime checks skipped"
+else
+    if printf '%s\n' "$LISTEN" | grep -qv '^127\.0\.0\.1:11434$'; then
+        bad "ollama listening beyond loopback: $(echo "$LISTEN" | tr '\n' ' ')"
+    else
+        ok "ollama listens on 127.0.0.1:11434 only"
+    fi
+
+    if [ -f "$OLLAMA_PLIST" ] && grep -A1 OLLAMA_NO_CLOUD "$OLLAMA_PLIST" | grep -q '<string>1</string>' \
+       && ! grep -q OLLAMA_DEBUG "$OLLAMA_PLIST"; then
+        ok "ollama service has cloud features disabled and debug logging off"
+    else
+        bad "ollama service lacks OLLAMA_NO_CLOUD=1 or enables debug logging (run scripts/setup_ollama.sh)"
+    fi
+
+    if .venv/bin/python - <<'PY' >/dev/null 2>&1
+import sys; sys.path.insert(0, "src")
+from pipeline.polisher import LocalPolisher, LocalOnlyError
+for name in ("gpt-oss:120b-cloud", "some-model:cloud"):
+    try:
+        LocalPolisher(model=name, prompt_path="prompts/eloquent_rewriter.md")
+    except LocalOnlyError:
+        continue
+    raise SystemExit(1)
+PY
+    then
+        ok "rewriter refuses Ollama cloud model names"
+    else
+        bad "rewriter accepted an Ollama cloud model name"
+    fi
+
+    # A synthetic canary sentence through the real rewriter, watching the
+    # server's sockets while it runs, then searching its log for the canary.
+    MODEL=$(grep -A20 '^rewrite:' config/app.yaml | grep -m1 '^  model:' | awk '{print $2}')
+    CANARY="zanzibarquokka"
+    OPIDS=$(pgrep -f 'ollama' | tr '\n' ' ')
+    .venv/bin/python - "$MODEL" "$CANARY" <<'PY' >/dev/null 2>&1 &
+import sys; sys.path.insert(0, "src")
+from pipeline.polisher import LocalPolisher
+p = LocalPolisher(model=sys.argv[1], prompt_path="prompts/eloquent_rewriter.md",
+                  timeout_seconds=120)
+r = p.polish(f"um so the {sys.argv[2]} report is not ready yet probably Friday", [], "rewrite")
+raise SystemExit(0 if r.ok else 1)
+PY
+    RWPID=$!
+    CONNS=0
+    while kill -0 "$RWPID" 2>/dev/null; do
+        for p in $OPIDS; do
+            n=$(lsof -nP -a -p "$p" -i 2>/dev/null \
+                | grep -vE '^COMMAND|127\.0\.0\.1|\[::1\]|localhost' | wc -l | tr -d ' ')
+            CONNS=$((CONNS + n))
+        done
+        sleep 0.5
+    done
+    if wait "$RWPID"; then
+        ok "rewrite completed through the local model ($MODEL)"
+    else
+        warn "rewrite did not complete (model not pulled?); socket check is partial"
+    fi
+    if [ "$CONNS" -eq 0 ]; then
+        ok "ollama opened no non-loopback sockets during a rewrite"
+    else
+        bad "ollama opened non-loopback socket(s) during a rewrite ($CONNS observations)"
+    fi
+    if [ -f "$OLLAMA_LOG" ] && grep -q "$CANARY" "$OLLAMA_LOG"; then
+        bad "ollama log contains dictated text (canary found in $OLLAMA_LOG)"
+    else
+        ok "ollama log does not contain dictated text (canary absent)"
+    fi
+fi
+
+# --------------------------------------------------------------------------
 say ""; say "## 10. Summary"; say ""
 # --------------------------------------------------------------------------
 say ""
