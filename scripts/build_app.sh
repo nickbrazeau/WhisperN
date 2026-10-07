@@ -113,6 +113,11 @@ try? fm.createDirectory(atPath: repo + "/runtime/tmp", withIntermediateDirectori
 let fd = open(repo + "/runtime/tmp/app-stderr.log", O_WRONLY | O_CREAT | O_TRUNC, 0o644)
 if fd >= 0 { dup2(fd, 2); close(fd) }
 
+// Apps launched from the Dock get PATH=/usr/bin:/bin:/usr/sbin:/sbin, which
+// hides Homebrew. Recording shells out to ffmpeg, so without this the app
+// finds no microphone at all.
+setenv("PATH", "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", 1)
+
 let python = repo + "/.venv/bin/python"
 var argv: [UnsafeMutablePointer<CChar>?] = [
     strdup(python), strdup(repo + "/scripts/whispern_app.py"), nil,

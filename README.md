@@ -47,7 +47,7 @@ direct entry into a record (CLAUDE.md §6 Phase 8).
 Requires macOS on Apple Silicon.
 
 ```bash
-brew install cmake
+brew install cmake ffmpeg
 
 git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
 cd whisper.cpp
