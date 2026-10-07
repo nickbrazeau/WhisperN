@@ -179,6 +179,10 @@ class Validator:
             candidates.append(w[:-3] + "y")
         if w.endswith("ied"):                      # "identified" -> "identify"
             candidates.append(w[:-3] + "y")
+        if w.endswith("ier"):                      # "earlier" -> "early"
+            candidates.append(w[:-3] + "y")
+        if w.endswith("iest"):                     # "earliest" -> "early"
+            candidates.append(w[:-4] + "y")
         if w.endswith("ed"):
             candidates += [w[:-2], w[:-1]]
             if len(w) > 4 and w[-3] == w[-4]:      # "stopped" -> "stop"
