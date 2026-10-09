@@ -80,7 +80,10 @@ polishing:
   # Evaluated and deferred: qwen2.5:14b (21/21) -- see ADR 0001
   model: REPLACE_WITH_APPROVED_LOCAL_MODEL
   temperature: 0
-  mode: clinical_strict
+  # `medical`, not `clinical_strict`, by owner decision 2026-10-07: warnings
+  # alone (e.g. an unrecognised word) no longer block auto-paste. Protected
+  # changes and drug-like words outside the vocabulary still require review.
+  mode: medical
   timeout_seconds: 20
   retries: 0
   cloud_fallback: false
