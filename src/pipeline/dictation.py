@@ -220,6 +220,14 @@ class DictationPipeline:
             polish_ms=result.latency_ms,
         )
 
+    def rewrite_text(self, text: str) -> DictationResult:
+        """Rewrite text already on screen, e.g. a Raw transcript the user edited.
+
+        Same checks as a dictated rewrite; `text` is the reference the rewrite
+        is validated against and what "Paste original" returns.
+        """
+        return self._rewrite(normalize_transcript(text), 0)
+
     def _rewrite(self, raw: str, t_ms: int) -> DictationResult:
         """Email/research rewrite (ADR 0002). Every outcome needs a click.
 

@@ -18,7 +18,11 @@ REWRITE MODE (ADR 0002, email and research only) sends the transcript to a
 local model that rewrites it as concise prose. Every rewrite is
 review_required: it is shown above the original transcript with any protected
 facts that moved, and pastes only on a click. "Paste original" is always
-offered beside it.
+offered beside it. The Rewrite button rewrites whatever is in the draft, so a
+Raw take can be rewritten without dictating again.
+
+The draft (transcript or rewrite) is editable. Copy and Paste send the draft
+as edited; auto-paste of a safe result sends it as transcribed.
 
 "Safe" means no protected content changed. It does NOT mean every word is
 correct: named-entity accuracy is 62.5%, so roughly one distinctive drug or
@@ -424,9 +428,22 @@ class WhisperNApp:
         # their place at the bottom when the window is short.
         card = tk.Frame(r, bg=PANEL, highlightthickness=1,
                         highlightbackground="#D5DAE3", highlightcolor="#D5DAE3")
+        # The draft: the only text Paste and Copy ever use. Editable, so a
+        # wrong word is fixed here rather than in the target app.
+        self.draft_lbl = tk.Label(card, text="", bg=PANEL, fg=ROYAL, font=head,
+                                  anchor="w", padx=20)
+        self.draft_lbl.pack(fill="x", pady=(12, 0))
+        draft_box = tk.Frame(card, bg=PANEL)
+        self.draft = tk.Text(
+            draft_box, bg=PANEL, fg=FG, font=body, relief="flat", bd=0,
+            wrap="word", padx=20, pady=8, height=5, spacing2=3,
+            insertbackground=FG, highlightthickness=0, undo=True,
+            selectbackground=HATTERAS, selectforeground=FG,
+        )
+        # Status, warnings, and the original beside a rewrite. Read-only.
         self.text = tk.Text(
             card, bg=PANEL, fg=FG, font=body, relief="flat", bd=0,
-            wrap="word", padx=20, pady=16, height=8, spacing2=3,
+            wrap="word", padx=20, pady=10, height=6, spacing2=3,
             insertbackground=FG, highlightthickness=0,
             selectbackground=HATTERAS, selectforeground=FG,
         )
@@ -439,11 +456,19 @@ class WhisperNApp:
                         background="#C4CBD6", bordercolor=PANEL, lightcolor="#C4CBD6",
                         darkcolor="#C4CBD6", arrowcolor=MUTED, gripcount=0, arrowsize=12)
         style.map("Card.Vertical.TScrollbar", background=[("active", ROYAL)])
+        dscroll = ttk.Scrollbar(draft_box, orient="vertical", command=self.draft.yview,
+                                style="Card.Vertical.TScrollbar")
+        self.draft.configure(yscrollcommand=dscroll.set)
+        dscroll.pack(side="right", fill="y")
+        self.draft.pack(side="left", fill="both", expand=True)
+        draft_box.pack(fill="both", expand=True)
+        tk.Frame(card, bg="#D5DAE3", height=1).pack(fill="x", padx=20)
         scroll = ttk.Scrollbar(card, orient="vertical", command=self.text.yview,
                                style="Card.Vertical.TScrollbar")
         self.text.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.text.pack(side="left", fill="both", expand=True)
+        self.draft.bind("<<Modified>>", self._on_draft_modified)
 
         t = self.text.tag_configure
         t("h", font=head, foreground=ROYAL, spacing1=4, spacing3=6)
@@ -482,7 +507,13 @@ class WhisperNApp:
                                    style="secondary", font=ui, padx=16, pady=7,
                                    state="disabled")
         self.orig_btn.pack(side="right", padx=(0, 8))
+        # Rewrite whatever is in the draft now, whichever mode it came from.
+        self.rw_btn = FlatButton(act, text="Rewrite", command=self.rewrite_now,
+                                 style="secondary", font=ui, padx=16, pady=7,
+                                 state="disabled")
+        self.rw_btn.pack(side="right", padx=(0, 8))
 
+        self._set_draft("", "")
         self._update_rewrite_label()
         self._update_paste_label()
         self._update_target_label()
@@ -554,11 +585,37 @@ class WhisperNApp:
         )
 
     def _show(self, chunks: list[tuple[str, str]]) -> None:
+        """Replace the read-only notes pane. Never touches the draft."""
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
         for body, tag in chunks:
             self.text.insert("end", body, tag)
         self.text.configure(state="disabled")
+
+    def _set_draft(self, text: str, label: str, editable: bool = True) -> None:
+        self.draft.configure(state="normal")
+        self.draft.delete("1.0", "end")
+        self.draft.insert("1.0", text)
+        self.draft.edit_reset()
+        self.draft.edit_modified(False)
+        self.draft.configure(state="normal" if editable else "disabled")
+        self.draft_lbl.configure(text=f"{label}  ·  click to edit" if label and editable else label)
+        self._update_action_buttons()
+
+    def _draft_text(self) -> str:
+        return self.draft.get("1.0", "end-1c").strip()
+
+    def _on_draft_modified(self, _evt=None) -> None:
+        if self.draft.edit_modified():
+            self.draft.edit_modified(False)
+            self._update_action_buttons()
+
+    def _update_action_buttons(self) -> None:
+        has = bool(self._draft_text()) and not (self.recording or self.busy)
+        for b in (self.copy_btn, self.paste_btn):
+            b.configure(state="normal" if has else "disabled")
+        rw_ok = has and self.pipeline.rewriter is not None
+        self.rw_btn.configure(state="normal" if rw_ok else "disabled")
 
     # ------------------------------------------------------------ record
 
@@ -622,9 +679,8 @@ class WhisperNApp:
         self.recording = True
         self.button.configure(text="■  Stop", bg=RED)
         self.status.configure(text="Recording…", fg=RED)
+        self._set_draft("", "", editable=False)
         self._show([("Listening.\n", "dim")])
-        self.copy_btn.configure(state="disabled")
-        self.paste_btn.configure(state="disabled")
         self.orig_btn.configure(state="disabled")
 
     def stop(self) -> None:
@@ -651,12 +707,36 @@ class WhisperNApp:
         self.status.configure(
             text="Transcribing and rewriting…" if rewrite else "Transcribing…", fg=BLUE)
         self._show([("Working…\n", "dim")])
+        self._update_action_buttons()
 
         # ffmpeg buffers the WAV until close; give it a moment, then run the
         # pipeline off the UI thread. The rewrite choice is fixed here, at
         # stop, so toggling while it works cannot change what comes back.
         threading.Thread(target=self._work, args=(self.audio_path, rewrite),
                          daemon=True).start()
+
+    def rewrite_now(self) -> None:
+        """Rewrite the draft as it stands, including any edits (ADR 0002).
+
+        Lets a Raw take be rewritten without re-dictating. The result is a
+        rewrite like any other: shown for review, pasted only on a click.
+        """
+        source = self._draft_text()
+        if self.busy or self.recording or not source or self.pipeline.rewriter is None:
+            return
+        self.busy = True
+        self.button.configure(bg=BLUE_BTN_DIM, state="disabled")
+        self.status.configure(text="Rewriting…", fg=BLUE)
+        self._show([("Rewriting…\n", "dim")])
+        self._set_draft(source, "", editable=False)
+
+        def work() -> None:
+            try:
+                self.events.put(("done", self.pipeline.rewrite_text(source)))
+            except Exception as exc:  # noqa: BLE001
+                self.events.put(("error", f"{type(exc).__name__}: {exc}"))
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _work(self, path: Path, rewrite: bool = False) -> None:
         time.sleep(0.4)
@@ -680,6 +760,8 @@ class WhisperNApp:
                     self.busy = False
                     self.button.configure(state="normal", bg=BLUE_BTN)
                     self.status.configure(text="Error", fg=RED)
+                    self.draft.configure(state="normal")
+                    self._update_action_buttons()
                     self._show([(str(payload), "bad")])
         except queue.Empty:
             pass
@@ -692,6 +774,8 @@ class WhisperNApp:
         self.result = result
         self.button.configure(state="normal", bg=BLUE_BTN)
 
+        if result.outcome in (Outcome.NO_SPEECH, Outcome.FAILED):
+            self._set_draft("", "")
         if result.outcome is Outcome.NO_SPEECH:
             self.status.configure(text="No speech detected", fg=AMBER)
             self._show([("NOTHING TRANSCRIBED\n", "h_warn"),
@@ -705,15 +789,22 @@ class WhisperNApp:
             self._show([(result.error or "unknown error", "bad")])
             return
 
+        if result.rewritten:
+            self._render_rewrite(result)
+            return
+
         text = result.text_to_use
-        self.copy_btn.configure(state="normal")
-        self.paste_btn.configure(state="normal")
+        self._set_draft(text, "TRANSCRIPT")
 
         if result.outcome is Outcome.SAFE:
             self.status.configure(text=f"Safe · {result.transcribe_ms} ms", fg=GREEN)
-            chunks = [("TRANSCRIPT\n", "h"), (text + "\n", "")]
-            if self.auto_paste.get():
-                chunks.append(("Pasted.\n", "note"))
+            chunks = []
+            if result.warnings:
+                chunks.append(("NOTES\n", "h_warn"))
+                chunks += [(f"•  {w}\n", "warn") for w in result.warnings]
+            chunks.append(("Pasted. Edit above and Paste again if needed.\n"
+                           if self.auto_paste.get() else
+                           "On the clipboard. Edit above, then Paste or Copy.\n", "note"))
             self._show(chunks)
             if self.auto_paste.get():
                 self.root.after(60, lambda: self._paste(text))
@@ -721,16 +812,12 @@ class WhisperNApp:
                 self._copy(text)
             return
 
-        if result.rewritten:
-            self._render_rewrite(result)
-            return
-
         # review_required / rejected: never auto-pasted, whatever the setting.
         label = ("Review required" if result.outcome is Outcome.REVIEW
                  else "Rejected")
         self.status.configure(text=label, fg=AMBER if result.outcome is Outcome.REVIEW else RED)
 
-        chunks: list[tuple[str, str]] = [("TRANSCRIPT\n", "h"), (text + "\n", "")]
+        chunks: list[tuple[str, str]] = []
         if result.protected_changes:
             chunks.append(("PROTECTED CHANGES\n", "h_bad"))
             for c in result.protected_changes:
@@ -739,7 +826,8 @@ class WhisperNApp:
             chunks.append(("WARNINGS\n", "h_warn"))
             for w in result.warnings:
                 chunks.append((f"•  {w}\n", "warn"))
-        chunks.append(("Not pasted. Read it, then Paste or Copy if correct.\n", "note"))
+        chunks.append(("Not pasted. Read it, edit above if needed, then Paste "
+                       "or Copy.\n", "note"))
         self._show(chunks)
         self._copy(text)
 
@@ -759,7 +847,7 @@ class WhisperNApp:
             chunks.append(("LOOKS CLINICAL — USE RAW FOR CLINICAL NOTES\n", "h_bad"))
             for w in clinical:
                 chunks.append((f"•  {w}\n", "bad"))
-        chunks += [("REWRITE\n", "h"), (result.polished_text + "\n", "")]
+        self._set_draft(result.polished_text, "REWRITE")
         if result.protected_changes:
             chunks.append(("CHECK AGAINST WHAT YOU SAID\n", "h_bad"))
             for c in result.protected_changes:
@@ -770,8 +858,8 @@ class WhisperNApp:
                 chunks.append((f"•  {w}\n", "warn"))
         chunks.append(("WHAT YOU SAID\n", "h_dim"))
         chunks.append((result.raw_text + "\n", "orig"))
-        chunks.append(("Not pasted. Read the rewrite, then Paste — or Paste "
-                       "original.\n", "note"))
+        chunks.append(("Not pasted. Read the rewrite, edit above if needed, then "
+                       "Paste — or Paste original.\n", "note"))
         self._show(chunks)
         self._copy(result.polished_text)
 
@@ -781,14 +869,19 @@ class WhisperNApp:
     def _copy(text: str) -> None:
         subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=False)
 
+    # Copy and Paste use the draft as it stands, edits included: what the
+    # user sees in the box is exactly what lands in the target app.
+
     def copy_now(self) -> None:
-        if self.result:
-            self._copy(self.result.text_to_use)
+        text = self._draft_text()
+        if text:
+            self._copy(text)
             self.status.configure(text="Copied", fg=GREEN)
 
     def paste_now(self) -> None:
-        if self.result:
-            self._paste(self.result.text_to_use)
+        text = self._draft_text()
+        if text:
+            self._paste(text)
 
     def paste_original(self) -> None:
         if self.result and self.result.raw_text:
@@ -817,7 +910,6 @@ class WhisperNApp:
             # clinical text ends up in the wrong window.
             self.status.configure(text="Not pasted — no target app", fg=AMBER)
             self._show([
-                (text + "\n\n", ""),
                 ("Not pasted: no target application known yet.\n", "warn"),
                 ("Click into the app you want this in, then press Paste.\n"
                  "The text is on the clipboard; ⌘V works.\n", "dim"),
@@ -832,7 +924,6 @@ class WhisperNApp:
             where = "it quit" if detail == "gone" else f"focus was {detail}"
             self.status.configure(text=f"Not pasted — {where}", fg=AMBER)
             self._show([
-                (text + "\n\n", ""),
                 (f"Not pasted: expected {target} to be frontmost but {where}.\n", "warn"),
                 ("Nothing was typed anywhere. The text is on the clipboard; "
                  "⌘V works.\n", "dim"),
@@ -840,7 +931,6 @@ class WhisperNApp:
         elif "not allowed" in detail or "1002" in detail:
             self.status.configure(text="Paste blocked — grant Accessibility", fg=RED)
             self._show([
-                (text + "\n\n", ""),
                 ("Pasting needs Accessibility permission.\n", "bad"),
                 ("System Settings → Privacy & Security → Accessibility, then "
                  "add WhisperN — or, if you launched this from a terminal, "
