@@ -65,9 +65,9 @@ take. It never contains transcript text.
 | 3 | Cloud fallback is disabled | **Yes** — no cloud code path; non-loopback endpoints refused at construction |
 | 4 | Temporary audio is deleted | **Yes** — verified, including after SIGTERM |
 | 5 | Transcript logging is disabled | **Yes** — verified no source path logs transcript text |
-| 6 | Protected-token validator is active | **Yes** — 128 tests passing |
+| 6 | Protected-token validator is active | **Yes** — 138 tests passing |
 | 7 | `clinical_strict` requires review on protected change | **Changed by owner decision, 2026-10-07.** Mode is now `medical`. A protected change, or a drug-like word outside the vocabulary, still forces `review_required`; a result with only warnings no longer does, and may auto-paste. To restore, see §5.7 |
-| 8 | Synthetic adversarial tests pass | **Yes** — 128 tests; 21/21 polisher cases (unused). Rewrite cases: 9/12 typed, 5/12 through audio (`docs/validation-report.md` §2a) |
+| 8 | Synthetic adversarial tests pass | **Yes** — 138 tests; 21/21 polisher cases (unused). Rewrite cases: 12/14 typed, 9/14 through audio (`docs/validation-report.md` §2a) |
 | 9 | **The user has reviewed the glossary** | **Yes — reviewed 2026-07-27** |
 | 10 | The user has reviewed all exact replacements | **Vacuously satisfied** — all 4 rules are `enabled: false`; none active. See §6 before enabling any |
 | 11 | Active model and configuration documented | **Yes** — §3 below |
@@ -95,7 +95,7 @@ Pin these. CLAUDE.md §10.6 asks for exact names and checksums.
 | ASR prompt | `infectious_diseases`, 16 terms, ~183 of 224 token budget |
 | Polishing model | **none** (`polishing.enabled: false`) |
 | Rewrite model | `qwen2.5:14b` Q4_K_M, Ollama digest `7cdf5a0187d5c58c…`, ~9 GB on disk |
-| Rewrite runtime | Ollama 0.40.0, `127.0.0.1:11434`, `OLLAMA_NO_CLOUD=1`, keep-alive 30 min |
+| Rewrite runtime | Ollama 0.40.0 (`brew pin ollama`), `127.0.0.1:11434`, `OLLAMA_NO_CLOUD=1`, keep-alive 30 min |
 | Rewrite context | `num_ctx: 4096` — 9.5 GB resident (15.2 GB at Ollama's default 32768). Dictations over ~850 words are refused, not truncated, and the raw transcript is returned for review |
 | Medications dictionary | 13,784 terms — FDA NDC Directory |
 | Organisms dictionary | 7,583 terms — NCBI Taxonomy, curated genus whitelist |
@@ -120,7 +120,7 @@ Run all three. Any failure blocks deployment.
 
 ```bash
 scripts/offline_smoke_test.sh                # expect 22 pass, 0 fail, 0 warn
-.venv/bin/python -m pytest tests/ -q         # expect 128 passed
+.venv/bin/python -m pytest tests/ -q         # expect 138 passed
 scripts/record_baseline.sh --check           # expect microphone OK
 ```
 
@@ -421,8 +421,9 @@ Matches CLAUDE.md §9.
   2 minutes otherwise, and on quit — each only if nothing else was copied
   since. A manager that ignores the convention still records the text, so
   check yours before dictating patient content.
-- **Ollama upgrades change the rewrite runtime.** Consider `brew pin ollama`,
-  and re-run `scripts/offline_smoke_test.sh` and
+- **Ollama upgrades change the rewrite runtime.** It is pinned
+  (`brew pin ollama`, 2026-10-10), so `brew upgrade` skips it. To upgrade
+  deliberately: `brew unpin ollama && brew upgrade ollama`, then re-pin and re-run `scripts/offline_smoke_test.sh` and
   `scripts/eval_rewrite_audio.py` after any upgrade.
 - **Re-run the smoke test after any dependency change** — a Homebrew upgrade
   already broke `ffmpeg` once during development.

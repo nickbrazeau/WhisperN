@@ -112,39 +112,48 @@ configuration; not evidence that a polisher would pass.
 ## 2a. Rewrite mode (ADR 0002)
 
 Email/research rewrite with `qwen2.5:14b` through loopback Ollama, scored
-against the 12 synthetic cases in `tests/fixtures/synthetic/rewrite_cases.yaml`.
+against the 14 synthetic cases in `tests/fixtures/synthetic/rewrite_cases.yaml`
+(12 original, plus 2 added 2026-10-10 for conversational hedges: "maybe",
+"I think", "I guess", "not sure").
 
-| Input to the rewriter | Passed | How |
+| Configuration (2026-10-10) | Typed | Audio (synthetic voice) |
 |---|---|---|
-| Typed case text | 9 / 12 | `scripts/eval_polisher.py --rewrite --model qwen2.5:14b` |
-| Synthetic speech → Whisper → rewrite | **5 / 12** | `scripts/eval_rewrite_audio.py` (2026-10-10, voice Samantha) |
+| Original prompt | 9 / 14 | 5 / 14 |
+| Hedges made a word-for-word rule, never filler | 9 / 14 | 7 / 14 |
+| + one deterministic repair of dropped hedges/negations | **12 / 14** | **9 / 14** |
 
-The audio run attributes each failure to the stage that caused it:
+Typed rows 1–2 are `scripts/eval_polisher.py --rewrite` (model only); row 3
+and every audio row are `scripts/eval_rewrite_audio.py [--typed]`, which runs
+the app's pipeline, repair included. All at `num_ctx` 4096.
+
+**The repair.** After a rewrite, `validate_rewrite` lists protected hedge and
+negation words that were in the transcript and are not in the rewrite. If
+there are any, the model is asked once to restore exactly those words. The
+revision is kept only if the same deterministic check finds strictly fewer
+protected changes; otherwise the first rewrite stands. It fired in 7 of 14
+typed cases, adding about 2 s each time, and the reader is told
+("restored words the first rewrite dropped: …"). It is never a reason to
+skip review: one repaired rewrite swapped in "possibly", which was not said,
+and that is flagged for the reader.
+
+The validator's protected uncertainty list now also includes "maybe",
+"perhaps", "likely", "I think", "I guess", "not sure", and "unsure", so swaps
+such as "I think" → "I believe" are flagged where they were not before.
+
+Remaining failures, audio run:
 
 | Case | Failure | Stage |
 |---|---|---|
 | `research_stats_numbers` | "6 sites" heard as "six" | ASR (numeral form) |
 | `research_attribution` | "reviewer two" heard as "reviewer 2" | ASR (numeral form) |
 | `research_gene_and_organism_names` | `blaKPC` heard as "black APC" | ASR |
-| `research_result_not_strengthened` | "crossed one" heard as "crossed 1"; "can't say" became "cannot conclude" | ASR, and rewriter (wording; meaning kept) |
-| `email_hedged_deadline` | **"probably" dropped** | Rewriter |
-| `email_no_invented_reason` | "miss" became "unable to attend"; "Apologies for any inconvenience" added for "sorry about that" | Rewriter (wording) |
+| `research_result_not_strengthened` | "crossed one" heard as "crossed 1"; "can't say" became "cannot say" | ASR, and rewriter (contraction; meaning kept) |
 | `email_laterality_and_dates` | kept "not March 13th" as the contrast instead of dropping the retracted date | Rewriter (arguably correct) |
 
-Three of the seven failures are numeral formatting rather than lost
-meaning, and are left failing rather than relaxing the cases (CLAUDE.md §9).
+No remaining failure is a lost hedge, negation, or fact. Cases were not
+relaxed to get here (CLAUDE.md §9).
 
-**The finding that matters is hedging.** The rewriter drops hedge words
-despite the prompt forbidding it: "probably" (twice), "maybe", and "I think"
-→ "I believe" were seen in this run. `validate_rewrite` caught every dropped
-"probably" and shows it under "Check against what you said"; it does not flag
-"maybe" → "around" or "I think" → "I believe", because those are not in the
-protected uncertainty list or are synonyms. Read rewrites for certainty.
-
-Re-run with the context capped at 4096 tokens (`rewrite.num_ctx`): identical
-results, 5 / 12 with the same failures, at 9.5 GB resident instead of 15.2 GB.
-
-Synthetic speech is cleaner than a person, so 5 / 12 is an optimistic bound.
+Synthetic speech is cleaner than a person, so these are optimistic bounds.
 The harness takes real recordings with `--audio-dir` (files named
 `<case id>.wav`); that measurement is still owed.
 
@@ -240,7 +249,7 @@ evidence here supports that sequencing.
 
 ```bash
 scripts/offline_smoke_test.sh                      # 22 privacy/offline checks
-.venv/bin/python -m pytest tests/ -q               # 128 tests
+.venv/bin/python -m pytest tests/ -q               # 138 tests
 scripts/eval_rewrite_audio.py                      # rewrite mode, audio to rewrite (§2a)
 scripts/benchmark.py runtime/tmp/corpus_prompted2 runtime/tmp/heldout_syn
 ```
