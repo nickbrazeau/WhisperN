@@ -160,6 +160,9 @@ def main() -> int:
         prompt_path=str(REPO_ROOT / "prompts" /
                         ("eloquent_rewriter.md" if args.rewrite else "medical_polisher.md")),
         timeout_seconds=args.timeout, retries=0,
+        # Same context cap as the app, so the model is measured as it runs
+        # and the eval does not force a reload at Ollama's default size.
+        num_ctx=4096 if args.rewrite else None,
     )
 
     results = []

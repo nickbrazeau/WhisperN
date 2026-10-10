@@ -26,6 +26,7 @@ transcription (CLAUDE.md §3.1). Nothing is written to disk except an optional
 Usage:
   scripts/eval_rewrite_audio.py
   scripts/eval_rewrite_audio.py --audio-dir ~/whispern-voice-cases
+  scripts/eval_rewrite_audio.py --typed      # same pipeline, no ASR
 """
 
 from __future__ import annotations
@@ -66,6 +67,9 @@ def main() -> int:
     ap.add_argument("--voice", default="Samantha")
     ap.add_argument("--audio-dir", type=Path,
                     help="use recordings <case id>.wav from here instead of `say`")
+    ap.add_argument("--typed", action="store_true",
+                    help="skip audio: feed the case text straight to the rewrite "
+                         "pipeline (includes the repair pass, unlike eval_polisher.py)")
     ap.add_argument("--json", type=Path, help="write a report here")
     args = ap.parse_args()
 
@@ -92,7 +96,9 @@ def main() -> int:
     cases = load_cases(args.cases)
 
     for case in cases:
-        if args.audio_dir:
+        if args.typed:
+            asr = case["raw"]
+        elif args.audio_dir:
             wav = args.audio_dir / f"{case['id']}.wav"
             if not wav.exists():
                 print(f"SKIP  {case['id']}  (no {wav.name})")
@@ -124,6 +130,9 @@ def main() -> int:
             print(f"    !! {b}")
         for c in res.protected_changes:
             print(f"    reader sees: {c.detail}")
+        for w in res.warnings:
+            if w.startswith("restored"):
+                print(f"    repair   : {w}")
         report.append({"id": case["id"], "pass": ok, "asr": asr, "rewrite": rewrite,
                        "problems": blamed, "latency_ms": res.polish_ms})
 

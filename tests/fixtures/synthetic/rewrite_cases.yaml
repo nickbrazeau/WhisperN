@@ -102,3 +102,19 @@ cases:
     note: >
       The suggestion of multiple imputation is tentative and must stay a
       suggestion, not become a decision.
+
+  - id: email_hedge_words_kept
+    category: uncertainty
+    raw: "um I think maybe we could push the submission to next week but I'm not sure the co-authors will agree so it's probably worth asking them first"
+    must_keep: ["I think", "maybe", "not sure", "probably", "co-authors", "next week"]
+    must_not_add: ["I believe", "likely", "will agree that", "should push"]
+    note: >
+      Four hedges in one sentence. Each must survive in the speaker's own
+      words; "I think" -> "I believe" and "maybe" -> "likely" were observed.
+
+  - id: research_hedged_estimate
+    category: uncertainty
+    raw: "so it looks like maybe 30 percent of the samples failed QC I guess but I haven't checked the second batch yet so don't quote that number"
+    must_keep: ["maybe", "30", "I guess", "second batch", "QC"]
+    must_not_add: ["confirmed", "definitely", "all samples"]
+    note: The estimate is explicitly provisional; the rewrite must not firm it up.
