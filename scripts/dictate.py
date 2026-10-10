@@ -32,6 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from integrations import audio as audio_devices  # noqa: E402
+from integrations import clipboard  # noqa: E402
 from integrations import media  # noqa: E402
 from pipeline.dictation import DictationPipeline, Outcome  # noqa: E402
 from pipeline.polisher import LocalOnlyError, LocalPolisher  # noqa: E402
@@ -252,7 +253,7 @@ def present(result, copy: bool, as_json: bool = False) -> int:
         import json as _json
         text = result.text_to_use
         if copy and text:
-            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=False)
+            clipboard.copy(text)   # concealed: history managers skip it
         print(_json.dumps({
             "outcome": result.outcome.value,
             "text": text,
@@ -315,10 +316,10 @@ def present(result, copy: bool, as_json: bool = False) -> int:
 
     text = result.text_to_use
     if copy and text:
-        subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=False)
+        clipboard.copy(text)   # concealed: history managers skip it
         which = "polished" if result.outcome is Outcome.SAFE and changed else "raw"
         print(f"\n{DIM}Copied {which} text to clipboard. Clipboard history is a "
-              f"leakage path -- clear it after pasting into a record.{RST}")
+              f"leakage path; this copy is marked concealed, but clear it after pasting into a record.{RST}")
 
     return {Outcome.SAFE: 0, Outcome.REVIEW: 1, Outcome.REJECTED: 2}[result.outcome]
 

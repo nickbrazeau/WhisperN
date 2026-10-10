@@ -69,6 +69,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from dictate import load_config  # noqa: E402
 from integrations import audio as audio_devices  # noqa: E402
+from integrations import clipboard  # noqa: E402
 from integrations import media  # noqa: E402
 from pipeline.dictation import DictationPipeline, Outcome  # noqa: E402
 from pipeline.polisher import LocalOnlyError, LocalPolisher  # noqa: E402
@@ -104,6 +105,13 @@ BLUE_BTN_DIM = "#9DB3CE"
 # fresher; higher is cheaper. 1 s keeps the target correct even if you switch
 # apps immediately before recording.
 POLL_SECONDS = 1.0
+
+# How long dictated text stays on the clipboard (CLAUDE.md §3.1: clipboard is a
+# leakage path). After a confirmed paste the target app has already read it;
+# otherwise it is left long enough to ⌘V by hand. Cleared only if nothing else
+# was copied since, so the user's own later copy is never wiped.
+CLIPBOARD_AFTER_PASTE_MS = 1500
+CLIPBOARD_TTL_MS = 120_000
 
 _FRONTMOST = 'tell application "System Events" to get name of first process whose frontmost is true'
 
@@ -865,9 +873,20 @@ class WhisperNApp:
 
     # ------------------------------------------------------------ clipboard
 
-    @staticmethod
-    def _copy(text: str) -> None:
-        subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=False)
+    def _copy(self, text: str) -> None:
+        """Copy marked concealed/transient, and schedule its removal."""
+        self._clip_count = clipboard.copy(text)
+        self._schedule_clipboard_clear(CLIPBOARD_TTL_MS)
+
+    def _schedule_clipboard_clear(self, delay_ms: int) -> None:
+        if getattr(self, "_clip_job", None):
+            self.root.after_cancel(self._clip_job)
+        count = getattr(self, "_clip_count", None)
+        self._clip_job = self.root.after(
+            delay_ms, lambda: clipboard.clear_if_unchanged(count)) if count else None
+
+    def clear_clipboard_now(self) -> None:
+        clipboard.clear_if_unchanged(getattr(self, "_clip_count", None))
 
     # Copy and Paste use the draft as it stands, edits included: what the
     # user sees in the box is exactly what lands in the target app.
@@ -912,7 +931,7 @@ class WhisperNApp:
             self._show([
                 ("Not pasted: no target application known yet.\n", "warn"),
                 ("Click into the app you want this in, then press Paste.\n"
-                 "The text is on the clipboard; ⌘V works.\n", "dim"),
+                 "The text is on the clipboard for 2 minutes; ⌘V works.\n", "dim"),
             ])
             return
 
@@ -920,13 +939,14 @@ class WhisperNApp:
 
         if status == "pasted":
             self.status.configure(text=f"Pasted → {target}", fg=GREEN)
+            self._schedule_clipboard_clear(CLIPBOARD_AFTER_PASTE_MS)
         elif status == "abort":
             where = "it quit" if detail == "gone" else f"focus was {detail}"
             self.status.configure(text=f"Not pasted — {where}", fg=AMBER)
             self._show([
                 (f"Not pasted: expected {target} to be frontmost but {where}.\n", "warn"),
-                ("Nothing was typed anywhere. The text is on the clipboard; "
-                 "⌘V works.\n", "dim"),
+                ("Nothing was typed anywhere. The text is on the clipboard "
+                 "for 2 minutes; ⌘V works.\n", "dim"),
             ])
         elif "not allowed" in detail or "1002" in detail:
             self.status.configure(text="Paste blocked — grant Accessibility", fg=RED)
@@ -935,7 +955,7 @@ class WhisperNApp:
                 ("System Settings → Privacy & Security → Accessibility, then "
                  "add WhisperN — or, if you launched this from a terminal, "
                  "that terminal.\n\n", "dim"),
-                ("The text is on the clipboard; ⌘V works.\n", "dim"),
+                ("The text is on the clipboard for 2 minutes; ⌘V works.\n", "dim"),
             ])
         else:
             self.status.configure(text="Paste failed", fg=RED)
@@ -950,6 +970,8 @@ def main() -> int:
         app.focus.stop()
         # Quitting mid-recording must not leave music paused for good.
         app._resume_music()
+        # Do not leave dictated text behind on the clipboard after quitting.
+        app.clear_clipboard_now()
     return 0
 
 
