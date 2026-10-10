@@ -325,7 +325,9 @@ PY
 
     # A synthetic canary sentence through the real rewriter, watching the
     # server's sockets while it runs, then searching its log for the canary.
-    MODEL=$(grep -A20 '^rewrite:' config/app.yaml | grep -m1 '^  model:' | awk '{print $2}')
+    # The first `  model:` inside the top-level `rewrite:` block, however long
+    # its comments grow (a fixed -A20 window once missed it).
+    MODEL=$(awk '/^[a-z_]+:/{inrw=($1=="rewrite:")} inrw && /^  model:/{print $2; exit}' config/app.yaml)
     CANARY="zanzibarquokka"
     OPIDS=$(pgrep -f 'ollama' | tr '\n' ' ')
     .venv/bin/python - "$MODEL" "$CANARY" <<'PY' >/dev/null 2>&1 &
