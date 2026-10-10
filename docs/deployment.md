@@ -65,9 +65,9 @@ take. It never contains transcript text.
 | 3 | Cloud fallback is disabled | **Yes** — no cloud code path; non-loopback endpoints refused at construction |
 | 4 | Temporary audio is deleted | **Yes** — verified, including after SIGTERM |
 | 5 | Transcript logging is disabled | **Yes** — verified no source path logs transcript text |
-| 6 | Protected-token validator is active | **Yes** — 123 tests passing |
+| 6 | Protected-token validator is active | **Yes** — 128 tests passing |
 | 7 | `clinical_strict` requires review on protected change | **Changed by owner decision, 2026-10-07.** Mode is now `medical`. A protected change, or a drug-like word outside the vocabulary, still forces `review_required`; a result with only warnings no longer does, and may auto-paste. To restore, see §5.7 |
-| 8 | Synthetic adversarial tests pass | **Yes** — 123 tests; 21/21 polisher cases (unused). Rewrite cases: 9/12 typed, 5/12 through audio (`docs/validation-report.md` §2a) |
+| 8 | Synthetic adversarial tests pass | **Yes** — 128 tests; 21/21 polisher cases (unused). Rewrite cases: 9/12 typed, 5/12 through audio (`docs/validation-report.md` §2a) |
 | 9 | **The user has reviewed the glossary** | **Yes — reviewed 2026-07-27** |
 | 10 | The user has reviewed all exact replacements | **Vacuously satisfied** — all 4 rules are `enabled: false`; none active. See §6 before enabling any |
 | 11 | Active model and configuration documented | **Yes** — §3 below |
