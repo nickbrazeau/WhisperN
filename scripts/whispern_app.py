@@ -340,6 +340,7 @@ class WhisperNApp:
                     prompt_path=str(REPO_ROOT / "prompts/eloquent_rewriter.md"),
                     timeout_seconds=int(cfg.get("rewrite.timeout_seconds", "90")),
                     keep_alive=cfg.get("rewrite.keep_alive", "30m"),
+                    num_ctx=int(cfg.get("rewrite.num_ctx", "4096")),
                 )
             except LocalOnlyError:
                 rewriter = None

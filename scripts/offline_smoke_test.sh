@@ -328,13 +328,14 @@ PY
     # The first `  model:` inside the top-level `rewrite:` block, however long
     # its comments grow (a fixed -A20 window once missed it).
     MODEL=$(awk '/^[a-z_]+:/{inrw=($1=="rewrite:")} inrw && /^  model:/{print $2; exit}' config/app.yaml)
+    NUM_CTX=$(awk '/^[a-z_]+:/{inrw=($1=="rewrite:")} inrw && /^  num_ctx:/{print $2; exit}' config/app.yaml)
     CANARY="zanzibarquokka"
     OPIDS=$(pgrep -f 'ollama' | tr '\n' ' ')
-    .venv/bin/python - "$MODEL" "$CANARY" <<'PY' >/dev/null 2>&1 &
+    .venv/bin/python - "$MODEL" "$CANARY" "${NUM_CTX:-0}" <<'PY' >/dev/null 2>&1 &
 import sys; sys.path.insert(0, "src")
 from pipeline.polisher import LocalPolisher
 p = LocalPolisher(model=sys.argv[1], prompt_path="prompts/eloquent_rewriter.md",
-                  timeout_seconds=120)
+                  timeout_seconds=120, num_ctx=int(sys.argv[3]) or None)
 r = p.polish(f"um so the {sys.argv[2]} report is not ready yet probably Friday", [], "rewrite")
 raise SystemExit(0 if r.ok else 1)
 PY

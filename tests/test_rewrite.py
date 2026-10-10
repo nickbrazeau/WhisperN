@@ -215,3 +215,80 @@ def test_clinical_dictation_in_rewrite_mode_is_warned(validator, raw):
 def test_email_and_research_dictation_is_not_warned(validator, raw):
     r = validator.validate_rewrite(raw, raw.capitalize() + ".")
     assert not any(w.startswith("looks clinical") for w in r.warnings)
+
+
+# --- context cap (num_ctx) ------------------------------------------------
+
+class _FakeResponse:
+    def __init__(self, data: dict) -> None:
+        import json
+        self._body = json.dumps(data).encode()
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        return None
+
+
+class _FakeOpener:
+    def __init__(self, data: dict) -> None:
+        self.data = data
+        self.sent: list[dict] = []
+
+    def open(self, req, timeout=None):
+        import json
+        self.sent.append(json.loads(req.data))
+        return _FakeResponse(self.data)
+
+
+def _capped(num_ctx: int, reply: dict) -> tuple[LocalPolisher, _FakeOpener]:
+    p = LocalPolisher(model="qwen2.5:14b",
+                      prompt_path=str(REPO_ROOT / "prompts/eloquent_rewriter.md"),
+                      num_ctx=num_ctx)
+    opener = _FakeOpener(reply)
+    p._opener = lambda: opener
+    return p, opener
+
+
+_OK_REPLY = {"message": {"content": '{"polished_text": "Synthetic.", "flags": []}'},
+             "done_reason": "stop", "prompt_eval_count": 700, "eval_count": 20}
+
+
+def test_num_ctx_is_sent_with_every_request_and_warmup():
+    p, opener = _capped(4096, _OK_REPLY)
+    assert p.polish("synthetic short dictation", [], "rewrite").ok
+    p.warm()
+    assert [s["options"]["num_ctx"] for s in opener.sent] == [4096, 4096]
+
+
+def test_overlong_dictation_is_refused_before_sending():
+    # Ollama would truncate from the start, dropping the system prompt.
+    p, opener = _capped(4096, _OK_REPLY)
+    res = p.polish("synthetic words " * 2000, [], "rewrite")
+    assert not res.ok and "too long" in res.error
+    assert opener.sent == []
+
+
+def test_output_that_hits_the_context_limit_is_rejected():
+    p, _ = _capped(4096, dict(_OK_REPLY, done_reason="length"))
+    res = p.polish("synthetic short dictation", [], "rewrite")
+    assert not res.ok and "context limit" in res.error
+
+
+def test_overlong_dictation_falls_back_to_raw_for_review(validator):
+    p, _ = _capped(4096, _OK_REPLY)
+    pipe = DictationPipeline(repo_root=REPO_ROOT, validator=validator, rewriter=p)
+    raw = "synthetic words " * 2000
+    res = pipe.rewrite_text(raw)
+    assert res.outcome is Outcome.REVIEW and not res.rewritten
+    assert res.text_to_use.strip() == raw.strip()
+
+
+def test_tiny_num_ctx_refused():
+    with pytest.raises(ValueError):
+        LocalPolisher(model="qwen2.5:14b", num_ctx=512,
+                      prompt_path=str(REPO_ROOT / "prompts/eloquent_rewriter.md"))

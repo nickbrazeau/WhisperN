@@ -141,6 +141,9 @@ despite the prompt forbidding it: "probably" (twice), "maybe", and "I think"
 "maybe" → "around" or "I think" → "I believe", because those are not in the
 protected uncertainty list or are synonyms. Read rewrites for certainty.
 
+Re-run with the context capped at 4096 tokens (`rewrite.num_ctx`): identical
+results, 5 / 12 with the same failures, at 9.5 GB resident instead of 15.2 GB.
+
 Synthetic speech is cleaner than a person, so 5 / 12 is an optimistic bound.
 The harness takes real recordings with `--audio-dir` (files named
 `<case id>.wav`); that measurement is still owed.
@@ -237,7 +240,7 @@ evidence here supports that sequencing.
 
 ```bash
 scripts/offline_smoke_test.sh                      # 22 privacy/offline checks
-.venv/bin/python -m pytest tests/ -q               # 123 tests
+.venv/bin/python -m pytest tests/ -q               # 128 tests
 scripts/eval_rewrite_audio.py                      # rewrite mode, audio to rewrite (§2a)
 scripts/benchmark.py runtime/tmp/corpus_prompted2 runtime/tmp/heldout_syn
 ```

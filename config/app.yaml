@@ -129,6 +129,11 @@ rewrite:
   # loaded cold costs several seconds before the first token.
   timeout_seconds: 90
   keep_alive: 30m
+  # Context window the model is loaded with. Ollama's default for this model
+  # is 32768 tokens: 15.2 GB resident on a 16 GB machine. At 4096 it is
+  # 9.5 GB (measured 2026-10-10). A take uses ~700 tokens; dictations over
+  # ~850 words are refused (raw transcript returned) rather than truncated.
+  num_ctx: 4096
   cloud_fallback: false
 
 validation:

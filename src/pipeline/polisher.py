@@ -241,6 +241,7 @@ class LocalPolisher:
         retries: int = 0,
         temperature: float = 0.0,
         keep_alive: str | None = None,
+        num_ctx: int | None = None,
     ) -> None:
         _assert_local_endpoint(endpoint)
         _assert_local_model(model)
@@ -258,6 +259,15 @@ class LocalPolisher:
         # Ollama's default (5 min). Rewrite mode sets it longer, because a cold
         # load of a 14B model costs seconds on every dictation after a pause.
         self.keep_alive = keep_alive
+        # Context window to load the model with. None leaves Ollama's default,
+        # which for qwen2.5:14b is the model's full 32768 tokens: 15.2 GB
+        # resident on a 16 GB machine, almost all of it KV cache that a
+        # dictation never uses. Ollama truncates an over-long prompt from the
+        # START -- dropping the system prompt -- so polish() refuses input that
+        # would not fit rather than letting that happen.
+        if num_ctx is not None and num_ctx < 1024:
+            raise ValueError("num_ctx must be >= 1024")
+        self.num_ctx = num_ctx
         self.system_prompt = self._load_prompt(prompt_path)
 
     @staticmethod
@@ -298,6 +308,9 @@ class LocalPolisher:
         payload = {"model": self.model}
         if self.keep_alive:
             payload["keep_alive"] = self.keep_alive
+        # Must match polish(): a different num_ctx makes Ollama reload.
+        if self.num_ctx:
+            payload["options"] = {"num_ctx": self.num_ctx}
         req = urllib.request.Request(
             f"{self.endpoint}/api/generate",
             data=json.dumps(payload).encode("utf-8"),
@@ -312,6 +325,23 @@ class LocalPolisher:
             log.warning("model warm-up failed: %s", type(exc).__name__)
             return False
 
+    # Conservative: English averages ~4 characters per token; 3 overestimates.
+    _CHARS_PER_TOKEN = 3
+    # Chat template, role markers, and the JSON envelope around the reply.
+    _OVERHEAD_TOKENS = 256
+
+    def fits(self, user_message: str, raw_text: str) -> bool:
+        """Whether prompt plus a reply as long as the input fits in num_ctx.
+
+        A rewrite or polish is at most about as long as its input, so the
+        reply is budgeted at the transcript's size again.
+        """
+        if not self.num_ctx:
+            return True
+        prompt = (len(self.system_prompt) + len(user_message)) // self._CHARS_PER_TOKEN
+        reply = len(raw_text) // self._CHARS_PER_TOKEN
+        return prompt + reply + self._OVERHEAD_TOKENS <= self.num_ctx
+
     def polish(self, raw_text: str, glossary: list[str], mode: str) -> PolishResult:
         """Polish `raw_text`. Never raises; failures return a failed result."""
         if mode not in VALID_MODES:
@@ -319,14 +349,17 @@ class LocalPolisher:
         if not raw_text or not raw_text.strip():
             return PolishResult.failed(raw_text, "empty transcript")
 
+        user_message = self._build_user_message(raw_text, glossary, mode)
+        if self.num_ctx and not self.fits(user_message, raw_text):
+            return PolishResult.failed(
+                raw_text, f"dictation too long for the model's {self.num_ctx}-token "
+                          "context; split it or raise num_ctx")
+
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": self.system_prompt},
-                {
-                    "role": "user",
-                    "content": self._build_user_message(raw_text, glossary, mode),
-                },
+                {"role": "user", "content": user_message},
             ],
             "stream": False,
             "format": "json",
@@ -335,6 +368,7 @@ class LocalPolisher:
                 "temperature": self.temperature,
                 "top_p": 1.0,
                 "seed": 0,
+                **({"num_ctx": self.num_ctx} if self.num_ctx else {}),
             },
         }
 
@@ -352,6 +386,15 @@ class LocalPolisher:
                 )
                 with self._opener().open(req, timeout=self.timeout) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
+
+                # Backstop for the estimate in fits(): output cut off by the
+                # context limit is incomplete text, never a usable result.
+                if self.num_ctx and (
+                    data.get("done_reason") == "length"
+                    or data.get("prompt_eval_count", 0) + data.get("eval_count", 0)
+                    >= self.num_ctx
+                ):
+                    raise ValueError("output reached the context limit (truncated)")
 
                 content = (data.get("message") or {}).get("content", "")
                 obj = _extract_json(content)

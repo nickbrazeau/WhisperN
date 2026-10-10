@@ -96,6 +96,7 @@ Pin these. CLAUDE.md §10.6 asks for exact names and checksums.
 | Polishing model | **none** (`polishing.enabled: false`) |
 | Rewrite model | `qwen2.5:14b` Q4_K_M, Ollama digest `7cdf5a0187d5c58c…`, ~9 GB on disk |
 | Rewrite runtime | Ollama 0.40.0, `127.0.0.1:11434`, `OLLAMA_NO_CLOUD=1`, keep-alive 30 min |
+| Rewrite context | `num_ctx: 4096` — 9.5 GB resident (15.2 GB at Ollama's default 32768). Dictations over ~850 words are refused, not truncated, and the raw transcript is returned for review |
 | Medications dictionary | 13,784 terms — FDA NDC Directory |
 | Organisms dictionary | 7,583 terms — NCBI Taxonomy, curated genus whitelist |
 | Exact replacements | 4 defined, **0 enabled** |
@@ -119,7 +120,7 @@ Run all three. Any failure blocks deployment.
 
 ```bash
 scripts/offline_smoke_test.sh                # expect 22 pass, 0 fail, 0 warn
-.venv/bin/python -m pytest tests/ -q         # expect 123 passed
+.venv/bin/python -m pytest tests/ -q         # expect 128 passed
 scripts/record_baseline.sh --check           # expect microphone OK
 ```
 
@@ -239,7 +240,7 @@ quit Hammerspoon; `scripts/dictate.py` and the GUI are unaffected.
 ### 5.6 Disable rewrite mode
 
 In `config/app.yaml` set `rewrite.enabled: false` and relaunch. The Rewrite
-segment and button go inert; Raw dictation is unaffected. To free the ~15 GB
+segment and button go inert; Raw dictation is unaffected. To free the ~9.5 GB
 the model holds while loaded, also `launchctl bootout
 gui/$(id -u)/local.whispern.ollama`.
 
