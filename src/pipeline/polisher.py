@@ -342,14 +342,32 @@ class LocalPolisher:
         reply = len(raw_text) // self._CHARS_PER_TOKEN
         return prompt + reply + self._OVERHEAD_TOKENS <= self.num_ctx
 
-    def polish(self, raw_text: str, glossary: list[str], mode: str) -> PolishResult:
+    def revise(self, raw_text: str, draft: str, missing: list[str]) -> PolishResult:
+        """Ask once more, naming the protected words the draft dropped.
+
+        The validator found these deterministically; the model is asked only
+        to put them back. The caller decides whether the revision is better.
+        """
+        words = ", ".join(f'"{w}"' for w in missing)
+        user_message = (
+            "MODE: rewrite\n\nTRANSCRIPT:\n\n" + raw_text
+            + "\n\nYOUR PREVIOUS REWRITE:\n\n" + draft
+            + f"\n\nYour previous rewrite dropped these words the speaker used: "
+            f"{words}. Return the rewrite again with each of them restored, word "
+            "for word and in the same sense as in the transcript. Change nothing "
+            "else."
+        )
+        return self.polish(raw_text, [], "rewrite", user_message=user_message)
+
+    def polish(self, raw_text: str, glossary: list[str], mode: str,
+               user_message: str | None = None) -> PolishResult:
         """Polish `raw_text`. Never raises; failures return a failed result."""
         if mode not in VALID_MODES:
             return PolishResult.failed(raw_text, f"unknown mode: {mode}")
         if not raw_text or not raw_text.strip():
             return PolishResult.failed(raw_text, "empty transcript")
 
-        user_message = self._build_user_message(raw_text, glossary, mode)
+        user_message = user_message or self._build_user_message(raw_text, glossary, mode)
         if self.num_ctx and not self.fits(user_message, raw_text):
             return PolishResult.failed(
                 raw_text, f"dictation too long for the model's {self.num_ctx}-token "

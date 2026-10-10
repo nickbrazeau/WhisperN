@@ -220,6 +220,10 @@ class DictationPipeline:
             polish_ms=result.latency_ms,
         )
 
+    # Protected categories a rewrite is asked once to restore when it drops
+    # them. Not numbers or names: those are flagged for the reader instead.
+    _REPAIRABLE = {"uncertainty", "negation"}
+
     def rewrite_text(self, text: str) -> DictationResult:
         """Rewrite text already on screen, e.g. a Raw transcript the user edited.
 
@@ -257,7 +261,29 @@ class DictationPipeline:
             )
 
         v = self.validator.validate_rewrite(raw, result.polished_text)
+
+        # One repair. The model drops hedges and negations despite the prompt
+        # (docs/validation-report.md §2a); the validator finds exactly which,
+        # so ask once for those words back. Kept only if strictly better by
+        # the same deterministic check -- never on the model's say-so.
+        repaired: list[str] = []
+        dropped = sorted({c.raw_value for c in v.protected_changes
+                          if c.category in self._REPAIRABLE and c.polished_value == "(absent)"})
+        if dropped:
+            second = self.rewriter.revise(raw, result.polished_text, dropped)
+            if second.ok:
+                v2 = self.validator.validate_rewrite(raw, second.polished_text)
+                if len(v2.protected_changes) < len(v.protected_changes):
+                    repaired = [d for d in dropped if d not in
+                                {c.raw_value for c in v2.protected_changes}]
+                    second.latency_ms += result.latency_ms
+                    second.flags = result.flags + second.flags
+                    result, v = second, v2
+
         warnings = list(v.warnings)
+        if repaired:
+            warnings.append("restored words the first rewrite dropped: "
+                            + ", ".join(repr(w) for w in repaired))
         for f in result.flags:
             warnings.append(f"model was unsure about: {f.raw_span!r}")
         return DictationResult(

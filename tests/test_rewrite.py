@@ -136,6 +136,9 @@ class StubRewriter:
             return PolishResult.failed(raw, "local model unreachable: stub")
         return PolishResult(ok=True, raw_text=raw, polished_text=self.text)
 
+    def revise(self, raw, draft, missing):
+        return PolishResult(ok=True, raw_text=raw, polished_text=draft)
+
 
 def pipeline_with(rewriter, validator) -> DictationPipeline:
     p = DictationPipeline(REPO_ROOT, validator=validator, rewriter=rewriter)
@@ -292,3 +295,68 @@ def test_tiny_num_ctx_refused():
     with pytest.raises(ValueError):
         LocalPolisher(model="qwen2.5:14b", num_ctx=512,
                       prompt_path=str(REPO_ROOT / "prompts/eloquent_rewriter.md"))
+
+
+# --- one repair for dropped hedges and negations --------------------------
+
+HEDGED = "I think maybe we could move the meeting to Wednesday."
+
+
+class RepairingStub:
+    """First rewrite drops hedges; the revision returns `revised`."""
+
+    def __init__(self, first: str, revised: str | None) -> None:
+        self.first, self.revised = first, revised
+        self.revise_calls: list[list[str]] = []
+
+    def polish(self, raw, glossary, mode):
+        return PolishResult(ok=True, raw_text=raw, polished_text=self.first)
+
+    def revise(self, raw, draft, missing):
+        self.revise_calls.append(missing)
+        if self.revised is None:
+            return PolishResult.failed(raw, "stub failure")
+        return PolishResult(ok=True, raw_text=raw, polished_text=self.revised)
+
+
+def _rewrite(stub, validator):
+    return DictationPipeline(REPO_ROOT, validator=validator, rewriter=stub).rewrite_text(HEDGED)
+
+
+@pytest.mark.parametrize("hedge", ["maybe", "perhaps", "I think", "I guess", "not sure", "likely"])
+def test_conversational_hedges_are_protected(validator, hedge):
+    raw = f"So {hedge} the draft is ready."
+    v = validator.validate_rewrite(raw, "The draft is ready.")
+    assert any(c.category == "uncertainty" for c in v.protected_changes)
+
+
+def test_dropped_hedges_trigger_one_repair_that_is_used(validator):
+    stub = RepairingStub("We could move the meeting to Wednesday.",
+                         "I think maybe we could move the meeting to Wednesday.")
+    res = _rewrite(stub, validator)
+    assert stub.revise_calls == [["i think", "maybe"]]
+    assert res.text_to_use == "I think maybe we could move the meeting to Wednesday."
+    assert not res.protected_changes
+    assert any("restored" in w for w in res.warnings)
+    assert res.outcome is Outcome.REVIEW   # still never SAFE
+
+
+def test_repair_that_is_not_better_is_discarded(validator):
+    first = "Maybe we could move the meeting to Wednesday."
+    stub = RepairingStub(first, "We should definitely move the meeting.")
+    res = _rewrite(stub, validator)
+    assert len(stub.revise_calls) == 1
+    assert res.text_to_use == first
+    assert any(c.raw_value == "i think" for c in res.protected_changes)
+
+
+def test_failed_repair_keeps_the_first_rewrite(validator):
+    first = "We could move the meeting to Wednesday."
+    res = _rewrite(RepairingStub(first, None), validator)
+    assert res.text_to_use == first and res.rewritten
+
+
+def test_faithful_rewrite_is_not_repaired(validator):
+    stub = RepairingStub(HEDGED, "unused")
+    _rewrite(stub, validator)
+    assert stub.revise_calls == []

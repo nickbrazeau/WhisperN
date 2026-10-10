@@ -238,6 +238,10 @@ _UNCERTAINTY = {
     "may", "might", "could", "presumed", "apparent", "questionable",
     "concerning for", "cannot exclude", "unconfirmed", "equivocal",
     "differential",
+    # Conversational hedges. A rewrite was measured dropping or swapping
+    # these ("maybe 30%" -> "around 30%", "I think" -> "I believe"), so they
+    # are protected too. Raw-vs-raw validation is unaffected.
+    "maybe", "perhaps", "likely", "i think", "i guess", "not sure", "unsure",
 }
 
 _ATTRIBUTION = {
