@@ -4,7 +4,7 @@ Consolidated validation evidence for the local medical dictation pipeline.
 CLAUDE.md §11 deliverable 12. Covers Phase 7 (offline and privacy
 verification) and summarises the evidence from Phases 1–6.
 
-Last updated: 2026-07-31.
+Last updated: 2026-10-10.
 
 ---
 
@@ -109,6 +109,52 @@ configuration; not evidence that a polisher would pass.
 
 ---
 
+## 2a. Rewrite mode (ADR 0002)
+
+Email/research rewrite with `qwen2.5:14b` through loopback Ollama, scored
+against the 12 synthetic cases in `tests/fixtures/synthetic/rewrite_cases.yaml`.
+
+| Input to the rewriter | Passed | How |
+|---|---|---|
+| Typed case text | 9 / 12 | `scripts/eval_polisher.py --rewrite --model qwen2.5:14b` |
+| Synthetic speech → Whisper → rewrite | **5 / 12** | `scripts/eval_rewrite_audio.py` (2026-10-10, voice Samantha) |
+
+The audio run attributes each failure to the stage that caused it:
+
+| Case | Failure | Stage |
+|---|---|---|
+| `research_stats_numbers` | "6 sites" heard as "six" | ASR (numeral form) |
+| `research_attribution` | "reviewer two" heard as "reviewer 2" | ASR (numeral form) |
+| `research_gene_and_organism_names` | `blaKPC` heard as "black APC" | ASR |
+| `research_result_not_strengthened` | "crossed one" heard as "crossed 1"; "can't say" became "cannot conclude" | ASR, and rewriter (wording; meaning kept) |
+| `email_hedged_deadline` | **"probably" dropped** | Rewriter |
+| `email_no_invented_reason` | "miss" became "unable to attend"; "Apologies for any inconvenience" added for "sorry about that" | Rewriter (wording) |
+| `email_laterality_and_dates` | kept "not March 13th" as the contrast instead of dropping the retracted date | Rewriter (arguably correct) |
+
+Three of the seven failures are numeral formatting rather than lost
+meaning, and are left failing rather than relaxing the cases (CLAUDE.md §9).
+
+**The finding that matters is hedging.** The rewriter drops hedge words
+despite the prompt forbidding it: "probably" (twice), "maybe", and "I think"
+→ "I believe" were seen in this run. `validate_rewrite` caught every dropped
+"probably" and shows it under "Check against what you said"; it does not flag
+"maybe" → "around" or "I think" → "I believe", because those are not in the
+protected uncertainty list or are synonyms. Read rewrites for certainty.
+
+Synthetic speech is cleaner than a person, so 5 / 12 is an optimistic bound.
+The harness takes real recordings with `--audio-dir` (files named
+`<case id>.wav`); that measurement is still owed.
+
+### Clipboard
+
+Copies are marked `org.nspasteboard.ConcealedType` and `TransientType`, and
+the GUI clears the clipboard after a paste, after 2 minutes, and on quit,
+only if nothing else was copied since. Verified in `tests/test_clipboard.py`
+on a private named pasteboard, and through the app's own timer path. Whether
+a given clipboard manager honours the markers is not verified here.
+
+---
+
 ## 3. Known limitations
 
 These are properties of the design, not defects to be fixed later, and they
@@ -154,8 +200,8 @@ difficult terminology.
 ### 3.6 Unmeasured
 
 - Bluetooth microphone input (expected worse than built-in).
-- Spontaneous speech with hesitation and self-correction; all testing used
-  read text.
+- Spontaneous speech with hesitation and self-correction from a real voice;
+  rewrite mode has been measured on synthetic speech only (§2a).
 - Any polishing model in production use.
 - Specialty modes other than `infectious_diseases`.
 
@@ -169,6 +215,10 @@ correspondence, note drafting, research writing.
 **Not suitable:** direct entry into a medical record without review;
 unattended or automated pasting; any workflow where a mis-transcribed drug
 name would not be caught by the person dictating.
+
+Since 2026-10-07 the default mode is `medical`, not `clinical_strict` (owner
+decision): a result with validator warnings but no protected change may now
+auto-paste. Protected changes still never auto-paste.
 
 A paste-at-cursor path exists in the desktop GUI (`scripts/whispern_app.py`)
 and is **off for everything except `safe_to_paste`**. `review_required` and
@@ -186,8 +236,9 @@ evidence here supports that sequencing.
 ## 5. Reproducing this report
 
 ```bash
-scripts/offline_smoke_test.sh                      # 16 privacy/offline checks
-.venv/bin/python -m pytest tests/ -q               # 48 validator + GUI-invariant tests
+scripts/offline_smoke_test.sh                      # 22 privacy/offline checks
+.venv/bin/python -m pytest tests/ -q               # 123 tests
+scripts/eval_rewrite_audio.py                      # rewrite mode, audio to rewrite (§2a)
 scripts/benchmark.py runtime/tmp/corpus_prompted2 runtime/tmp/heldout_syn
 ```
 

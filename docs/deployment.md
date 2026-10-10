@@ -3,18 +3,26 @@
 CLAUDE.md §11 deliverable 13. Covers what to deploy, how to verify it, how to
 roll back, and what to do when a stage fails.
 
-Last updated: 2026-08-02.
+Last updated: 2026-10-10.
 
 ---
 
 ## 1. What is being deployed
 
-A **raw-transcript dictation pipeline with review**. Polishing is disabled
-(ADR 0001), so no model rewrites clinical text.
+A **raw-transcript dictation pipeline with review**, plus an opt-in
+**email/research rewrite mode** (ADR 0002). Clinical polishing is disabled
+(ADR 0001), so no model edits clinical text.
 
 ```
 microphone → VAD gate → whisper.cpp → normalize → validate → review
+                                          └─ (Rewrite) → local qwen2.5:14b → validate_rewrite → review
 ```
+
+Rewrite mode is for email and research only. It runs on a loopback-only
+Ollama (`scripts/setup_ollama.sh`, `OLLAMA_NO_CLOUD=1`). The GUI starts every
+launch in Raw; Rewrite is chosen per session in the header, or applied to the
+current draft with the **Rewrite** button. A rewrite is never pasted without a
+click, and the original is shown beside it with "Paste original".
 
 Three front ends:
 
@@ -27,9 +35,16 @@ Three front ends:
   clipboard-only.
 - `WhisperN.app` / `scripts/whispern_app.py` (desktop GUI) — pastes at the
   cursor, only `safe_to_paste`, only when auto-paste is ticked. See §6.3.
+  The draft (transcript or rewrite) is editable: Copy and Paste send it as
+  edited. Notes, warnings, and the original sit in a read-only pane below.
 
-The bundle is built by `scripts/build_app.sh`; it is a launcher that runs the
-Python from the repo, so it must be rebuilt if the repo moves. Privacy grants
+The bundle is built by `scripts/build_app.sh`; its executable is a compiled
+Swift launcher (a shell-script launcher is denied ~/Documents access by macOS
+silently) that runs the Python from the repo, so edits to the Python need only
+a relaunch, and the bundle must be rebuilt only if the repo moves. Rebuilding
+re-signs ad hoc, which can drop privacy grants: if recording or pasting stops
+working after a rebuild, run `tccutil reset All local.whispern` and grant
+again. Privacy grants
 (Microphone, Accessibility, Automation) attach to `WhisperN.app` rather than to
 a terminal.
 
@@ -46,20 +61,20 @@ take. It never contains transcript text.
 | # | Item | Status |
 |---|---|---|
 | 1 | Local transcription works with the network disabled | **Yes** — verified via `sandbox-exec`, `docs/validation-report.md` §1 |
-| 2 | Local polishing works with the network disabled | **N/A** — polishing disabled (ADR 0001) |
+| 2 | Local polishing works with the network disabled | **N/A** for clinical polishing (disabled, ADR 0001). Rewrite mode: **Yes** — Ollama bound to 127.0.0.1 only, no non-loopback sockets during a rewrite, canary absent from its log (smoke test §9a) |
 | 3 | Cloud fallback is disabled | **Yes** — no cloud code path; non-loopback endpoints refused at construction |
 | 4 | Temporary audio is deleted | **Yes** — verified, including after SIGTERM |
 | 5 | Transcript logging is disabled | **Yes** — verified no source path logs transcript text |
-| 6 | Protected-token validator is active | **Yes** — 61 tests passing |
-| 7 | `clinical_strict` requires review on protected change | **Yes** — default mode; never returns `safe_to_paste` on a protected change |
-| 8 | Synthetic adversarial tests pass | **Yes** — 61 validator tests; 21/21 polisher cases (unused) |
+| 6 | Protected-token validator is active | **Yes** — 123 tests passing |
+| 7 | `clinical_strict` requires review on protected change | **Changed by owner decision, 2026-10-07.** Mode is now `medical`. A protected change, or a drug-like word outside the vocabulary, still forces `review_required`; a result with only warnings no longer does, and may auto-paste. To restore, see §5.7 |
+| 8 | Synthetic adversarial tests pass | **Yes** — 123 tests; 21/21 polisher cases (unused). Rewrite cases: 9/12 typed, 5/12 through audio (`docs/validation-report.md` §2a) |
 | 9 | **The user has reviewed the glossary** | **Yes — reviewed 2026-07-27** |
 | 10 | The user has reviewed all exact replacements | **Vacuously satisfied** — all 4 rules are `enabled: false`; none active. See §6 before enabling any |
 | 11 | Active model and configuration documented | **Yes** — §3 below |
 | 12 | A rollback procedure exists | **Yes** — §5 below |
-| 13 | The application visibly indicates its active mode | **Yes** — `dictate.py` prints mode, polishing, VAD, and paste state on every run |
+| 13 | The application visibly indicates its active mode | **Yes** — `dictate.py` prints mode, polishing, VAD, and paste state on every run; the GUI shows Raw/Rewrite in the header and mode in the strip below it |
 
-**All items are satisfied.** Item 10 is satisfied by there being nothing
+**All items are satisfied, with item 7 changed by the owner.** Item 10 is satisfied by there being nothing
 enabled to review, which is a weaker statement than a review having happened —
 enabling any rule later re-opens it.
 
@@ -79,10 +94,13 @@ Pin these. CLAUDE.md §10.6 asks for exact names and checksums.
 | Decoding | 5 beams, best-of 5, language forced to `en` |
 | ASR prompt | `infectious_diseases`, 16 terms, ~183 of 224 token budget |
 | Polishing model | **none** (`polishing.enabled: false`) |
+| Rewrite model | `qwen2.5:14b` Q4_K_M, Ollama digest `7cdf5a0187d5c58c…`, ~9 GB on disk |
+| Rewrite runtime | Ollama 0.40.0, `127.0.0.1:11434`, `OLLAMA_NO_CLOUD=1`, keep-alive 30 min |
 | Medications dictionary | 13,784 terms — FDA NDC Directory |
 | Organisms dictionary | 7,583 terms — NCBI Taxonomy, curated genus whitelist |
 | Exact replacements | 4 defined, **0 enabled** |
-| Default mode | `clinical_strict` |
+| Default mode | `medical` (was `clinical_strict` until 2026-10-07) |
+| GUI start mode | Raw (`rewrite.default_on: false`) |
 | Platform | macOS 15.5, Apple M1 Pro, 16 GB |
 
 Record the git commit of this repository alongside any deployment:
@@ -100,8 +118,8 @@ git rev-parse --short HEAD
 Run all three. Any failure blocks deployment.
 
 ```bash
-scripts/offline_smoke_test.sh                # expect 16 pass, 0 fail
-.venv/bin/python -m pytest tests/ -q         # expect 61 passed
+scripts/offline_smoke_test.sh                # expect 22 pass, 0 fail, 0 warn
+.venv/bin/python -m pytest tests/ -q         # expect 123 passed
 scripts/record_baseline.sh --check           # expect microphone OK
 ```
 
@@ -218,7 +236,19 @@ Then reload Hammerspoon and confirm `runtime/tmp/hammerspoon-status.txt` shows
 `auto_paste  false` with a current timestamp. To disable the hotkey entirely,
 quit Hammerspoon; `scripts/dictate.py` and the GUI are unaffected.
 
-### 5.6 Full revert
+### 5.6 Disable rewrite mode
+
+In `config/app.yaml` set `rewrite.enabled: false` and relaunch. The Rewrite
+segment and button go inert; Raw dictation is unaffected. To free the ~15 GB
+the model holds while loaded, also `launchctl bootout
+gui/$(id -u)/local.whispern.ollama`.
+
+### 5.7 Restore `clinical_strict`
+
+In `config/app.yaml` set `polishing.mode: clinical_strict` and relaunch. Any
+validator warning then forces review again, so fewer results auto-paste.
+
+### 5.8 Full revert
 
 ```bash
 git log --oneline
@@ -383,8 +413,16 @@ Matches CLAUDE.md §9.
 
 - **Audio and transcripts must never be committed.** `.gitignore` covers the
   known patterns; `offline_smoke_test.sh` checks git tracking on every run.
-- **Clipboard history is a leakage path.** `--copy` warns about this. Clear it
-  after pasting into a record.
+- **Clipboard history is a leakage path.** Every copy from the GUI and from
+  `dictate.py --copy` is marked `org.nspasteboard.ConcealedType` and
+  `TransientType`, which most clipboard managers honour by not recording it.
+  The GUI also empties the clipboard 1.5 s after a confirmed paste, after
+  2 minutes otherwise, and on quit — each only if nothing else was copied
+  since. A manager that ignores the convention still records the text, so
+  check yours before dictating patient content.
+- **Ollama upgrades change the rewrite runtime.** Consider `brew pin ollama`,
+  and re-run `scripts/offline_smoke_test.sh` and
+  `scripts/eval_rewrite_audio.py` after any upgrade.
 - **Re-run the smoke test after any dependency change** — a Homebrew upgrade
   already broke `ffmpeg` once during development.
 - **Benchmark before and after every model, prompt, or dictionary change**
