@@ -41,10 +41,17 @@ Three front ends:
 The bundle is built by `scripts/build_app.sh`; its executable is a compiled
 Swift launcher (a shell-script launcher is denied ~/Documents access by macOS
 silently) that runs the Python from the repo, so edits to the Python need only
-a relaunch, and the bundle must be rebuilt only if the repo moves. Rebuilding
-re-signs ad hoc, which can drop privacy grants: if recording or pasting stops
-working after a rebuild, run `tccutil reset All local.whispern` and grant
-again. Privacy grants
+a relaunch, and the bundle must be rebuilt only if the repo moves. It is
+signed with a local self-signed identity, "WhisperN Local Signing"
+(`scripts/setup_signing.sh`, run once; private key in the login keychain,
+usable by `codesign` only). Privacy grants attach to the designated
+requirement `identifier "local.whispern" and certificate leaf =
+H"d5babfe957bfcb20fd32616dc7edb154078b3a5a"`, which is identical across
+rebuilds, so grants survive them. Without the identity, `build_app.sh` falls
+back to ad hoc, whose requirement is the build's cdhash and changes every
+build. If recording or pasting ever stops working, run `tccutil reset All
+local.whispern` and grant again. To remove the identity:
+`security delete-identity -c "WhisperN Local Signing"`. Privacy grants
 (Microphone, Accessibility, Automation) attach to `WhisperN.app` rather than to
 a terminal.
 

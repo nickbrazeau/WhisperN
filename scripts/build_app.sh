@@ -130,17 +130,26 @@ swiftc -O -o "$APP/Contents/MacOS/WhisperN" "$LAUNCHER_SRC"
 echo "  launcher  -> $REPO_ROOT"
 
 # ---------------------------------------------------------------- sign
-# Ad-hoc, because there is no Developer ID here and none is needed for a
-# locally built tool. It still gives the bundle a stable code identity, which
-# is what the privacy grants attach to -- without it, every rebuild can look
-# like a different application and silently drop the permissions.
-codesign --force --deep --sign - "$APP" 2>/dev/null \
-    && echo "  signed    ad-hoc" \
-    || echo "  WARNING: ad-hoc signing failed; permissions may reset on rebuild"
+# Signed with the local identity from scripts/setup_signing.sh when present.
+# macOS privacy grants attach to the designated requirement: with that
+# identity it is the bundle id plus the certificate hash, stable across
+# rebuilds; ad hoc it is the build's cdhash, so every rebuild drops the
+# grants. Ad hoc remains the fallback so a fresh checkout still builds.
+SIGN_ID="WhisperN Local Signing"
+if security find-certificate -c "$SIGN_ID" >/dev/null 2>&1; then
+    codesign --force --deep --sign "$SIGN_ID" "$APP"
+    echo "  signed    $SIGN_ID"
+else
+    codesign --force --deep --sign - "$APP" 2>/dev/null \
+        && echo "  signed    ad-hoc (run scripts/setup_signing.sh so grants survive rebuilds)" \
+        || echo "  WARNING: ad-hoc signing failed; permissions may reset on rebuild"
+fi
+echo "  requires  $(codesign -dr - "$APP" 2>&1 | sed -n 's/^designated => //p')"
 
 if [ "$INSTALL" = "1" ]; then
     # Replacing a running app leaves it in a broken state, so refuse instead.
-    if pgrep -f "WhisperN.app/Contents/MacOS/WhisperN" >/dev/null 2>&1; then
+    # The launcher execs Python, so a running app shows up as the script.
+    if pgrep -f "WhisperN.app/Contents/MacOS/WhisperN|$REPO_ROOT/scripts/whispern_app.py" >/dev/null 2>&1; then
         echo "error: WhisperN is running; quit it before --install" >&2
         exit 1
     fi

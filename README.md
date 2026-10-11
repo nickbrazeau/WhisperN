@@ -92,9 +92,11 @@ launch. Rebuild after moving the repo, because the launcher hardcodes its path.
 from file permissions, so `chmod` does not help. The first launch asks
 "WhisperN would like to access files in your Documents folder"; click Allow.
 That needs the compiled launcher `build_app.sh` produces, because a
-shell-script launcher is refused silently. Each rebuild re-signs the app
-ad hoc and can invalidate earlier grants. If the app then exits at once
-with no window, reset its grants and allow again:
+shell-script launcher is refused silently. Run `scripts/setup_signing.sh`
+once before building: it creates a local signing certificate, so grants
+survive rebuilds (without it the app is signed ad hoc and every rebuild drops
+them). If the app ever exits at once with no window, reset its grants and
+allow again:
 
 ```bash
 tccutil reset All local.whispern && open -a WhisperN
