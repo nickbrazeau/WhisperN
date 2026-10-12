@@ -61,25 +61,25 @@ from pipeline.dictation import DictationPipeline, Outcome  # noqa: E402
 from pipeline.polisher import LocalOnlyError, LocalPolisher  # noqa: E402
 from validation.validator import Validator  # noqa: E402
 
-# Duke palette (Duke University brand colours). Navy carries the chrome, Royal
-# the actions, and the work area is light so a transcript reads like a page.
-# Every text colour below clears WCAG AA (4.5:1) on the background it sits on.
-NAVY     = "#012169"   # Duke Navy Blue: header
-ROYAL    = "#00539B"   # Duke Royal Blue: primary action, accents
-SHALE    = "#0577B1"   # Shale Blue: hover on primary
-HATTERAS = "#E2E6ED"   # Hatteras: info strip, card borders, text on navy
-WHISPER  = "#F3F2F1"   # Whisper Gray: window background
-GINGER   = "#FCF7E5"   # Ginger Beer: warning wash
-DANDELION = "#FFD960"  # Dandelion: problem text on navy
+# WhisperN palette. Navy carries the chrome, Royal the actions, and the work
+# area is light so a transcript reads like a page. Every text colour below
+# clears WCAG AA (4.5:1) on the background it sits on.
+NAVY     = "#012169"   # header
+ROYAL    = "#00539B"   # primary action, accents
+SKY      = "#0577B1"   # hover on primary
+MIST     = "#E2E6ED"   # info strip, card borders, text on navy
+PAPER    = "#F3F2F1"   # window background
+CREAM    = "#FCF7E5"   # warning wash
+YELLOW   = "#FFD960"   # problem text on navy
 BAD_WASH = "#FBEDEB"
 
 # Semantic names the rest of the file uses.
-BG      = WHISPER
+BG      = PAPER
 PANEL   = "#FFFFFF"
 FG      = "#262626"
 MUTED   = "#5F6368"
-GREEN   = "#1D6363"    # Duke Magnolia: success text
-AMBER   = "#9A5200"    # darkened Persimmon: warning text
+GREEN   = "#1D6363"    # success text
+AMBER   = "#9A5200"    # warning text
 RED     = "#B3261E"
 BLUE    = ROYAL
 
@@ -103,9 +103,9 @@ class FlatButton(tk.Label):
     """
 
     STYLES = {
-        "primary":   dict(bg=ROYAL, fg="#FFFFFF", hover=SHALE,
+        "primary":   dict(bg=ROYAL, fg="#FFFFFF", hover=SKY,
                           dis_bg=BLUE_BTN_DIM, dis_fg="#FFFFFF", border=ROYAL),
-        "secondary": dict(bg="#FFFFFF", fg=NAVY, hover=HATTERAS,
+        "secondary": dict(bg="#FFFFFF", fg=NAVY, hover=MIST,
                           dis_bg="#FFFFFF", dis_fg="#A8ADB4", border="#C4CBD6"),
     }
 
@@ -263,7 +263,7 @@ class WhisperNApp:
         # comes back is a different kind of text, so it must be visible before
         # recording, not discovered after. Two segments, so the current mode
         # is always named rather than implied by one label's colour.
-        seg = tk.Frame(bar, bg=HATTERAS, padx=1, pady=1)
+        seg = tk.Frame(bar, bg=MIST, padx=1, pady=1)
         seg.pack(side="left", pady=12)
         self.seg_raw = tk.Label(seg, text="  Raw  ", font=small, cursor="hand2", padx=8, pady=3)
         self.seg_rw = tk.Label(seg, text="  Rewrite  ", font=small, cursor="hand2", padx=8, pady=3)
@@ -278,13 +278,13 @@ class WhisperNApp:
         self.mic_lbl.pack(side="right", padx=(6, 16))
 
         # --- mode strip (CLAUDE.md §6 Phase 5.10) --------------------------
-        strip = tk.Frame(r, bg=HATTERAS, height=28)
+        strip = tk.Frame(r, bg=MIST, height=28)
         strip.pack(fill="x")
         strip.pack_propagate(False)
-        self.mode_lbl = tk.Label(strip, text="", bg=HATTERAS, fg=NAVY, font=small)
+        self.mode_lbl = tk.Label(strip, text="", bg=MIST, fg=NAVY, font=small)
         self.mode_lbl.pack(side="left", padx=16)
         tk.Label(strip, text="stays in WhisperN · Copy to take it out",
-                 bg=HATTERAS, fg=GREEN, font=small).pack(side="right", padx=16)
+                 bg=MIST, fg=GREEN, font=small).pack(side="right", padx=16)
 
         # --- record ---------------------------------------------------------
         top = tk.Frame(r, bg=BG)
@@ -297,6 +297,8 @@ class WhisperNApp:
         )
         self.button.pack(pady=(8, 4))
         tk.Label(top, text="⌘W to start or stop", bg=BG, fg=MUTED, font=small).pack()
+        tk.Label(top, text="Not for clinical use or clinical text.", bg=BG, fg=AMBER,
+                 font=small).pack(pady=(2, 0))
 
         # --- result card ----------------------------------------------------
         # Built before the action row but packed after it, so the buttons keep
@@ -313,14 +315,14 @@ class WhisperNApp:
             draft_box, bg=PANEL, fg=FG, font=body, relief="flat", bd=0,
             wrap="word", padx=20, pady=8, height=5, spacing2=3,
             insertbackground=FG, highlightthickness=0, undo=True,
-            selectbackground=HATTERAS, selectforeground=FG,
+            selectbackground=MIST, selectforeground=FG,
         )
         # Status, warnings, and the original beside a rewrite. Read-only.
         self.text = tk.Text(
             card, bg=PANEL, fg=FG, font=body, relief="flat", bd=0,
             wrap="word", padx=20, pady=10, height=6, spacing2=3,
             insertbackground=FG, highlightthickness=0,
-            selectbackground=HATTERAS, selectforeground=FG,
+            selectbackground=MIST, selectforeground=FG,
         )
         # The native Aqua scrollbar follows the system appearance, so in dark
         # mode it drew a black bar down a white card. A styled clam scrollbar
@@ -413,7 +415,7 @@ class WhisperNApp:
     def _update_rewrite_label(self) -> None:
         on = self.rewrite_on
         sel = dict(bg="#FFFFFF", fg=NAVY)
-        off = dict(bg=NAVY, fg=HATTERAS)
+        off = dict(bg=NAVY, fg=MIST)
         self.seg_raw.configure(**(off if on else sel))
         self.seg_rw.configure(**(sel if on else off))
         if self.pipeline.rewriter is None:
@@ -429,7 +431,7 @@ class WhisperNApp:
         d = self.device
         self.mic_lbl.configure(
             text=f"🎙 {d.name}" if d else "🎙 resolving…",
-            fg=HATTERAS if d else DANDELION,
+            fg=MIST if d else YELLOW,
         )
 
     def _show(self, chunks: list[tuple[str, str]]) -> None:
