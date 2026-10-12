@@ -1,15 +1,51 @@
-# WhisperN — Local Medical Dictation
+# WhisperN — Local Dictation for Email and Research
 
-A fully local, privacy-preserving medical dictation pipeline. Audio, transcripts,
-prompts, and dictionaries never leave the machine. There is no cloud fallback,
-by design.
+> [!WARNING]
+> **WhisperN is NOT for clinical use or clinical text.** Do not dictate patient
+> information, clinical notes, orders, or anything destined for a medical
+> record. It is a dictation aid for email and research writing only. It is not
+> a medical device, has not been validated for clinical use, and gets
+> distinctive drug and organism names wrong roughly one time in three. You are
+> responsible for every word you copy out of it.
 
-See [`CLAUDE.md`](CLAUDE.md) for the full specification, constraints, and phased
-execution plan. **`CLAUDE.md` is the authority**; this README is orientation only.
+A fully local, private dictation app for macOS. Speech is transcribed on your
+Mac with [whisper.cpp](https://github.com/ggml-org/whisper.cpp); an optional
+local model can tidy the text into concise prose. Audio, transcripts, prompts,
+and dictionaries never leave the machine. There is no cloud fallback, by
+design. Text stays in the WhisperN window until you click **Copy**.
 
-> This is a dictation and editing tool. It is not a diagnostic system, clinical
-> decision-support system, or autonomous medical documentation system. The user
-> remains responsible for all text entered into any clinical record.
+The vocabulary leans toward infectious diseases and microbiology research, so
+it recognises terms like *Staphylococcus aureus* or *piperacillin-tazobactam*
+more often than a general dictation tool would.
+
+See [`CLAUDE.md`](CLAUDE.md) for the full specification and constraints; this
+README is orientation only. Licensed under [MIT](LICENSE).
+
+## Install on your Mac
+
+Needs macOS on Apple Silicon, [Homebrew](https://brew.sh), and about 3 GB of
+disk (12 GB with rewrite mode, which also wants 16 GB+ of memory).
+
+```bash
+git clone git@github.com:nickbrazeau/WhisperN.git
+cd WhisperN
+scripts/bootstrap_macos.sh                  # or: --with-rewrite
+scripts/setup_signing.sh                    # optional; keeps permissions across rebuilds
+scripts/build_app.sh --install              # → /Applications/WhisperN.app
+open -a WhisperN
+```
+
+`bootstrap_macos.sh` is the only step that uses the network: it installs
+`cmake`, `ffmpeg`, and Python with Tk through Homebrew, builds whisper.cpp at
+the pinned commit, downloads the speech model (checksum-verified), and runs
+the tests. After that, WhisperN works with the network off.
+
+On first launch, allow **Microphone** and **Documents** access (and Automation,
+used only to pause music while you record). WhisperN never needs
+Accessibility. Press **Record** or ⌘W, speak, review, then **Copy**.
+
+If you move the folder, re-run `scripts/build_app.sh --install`: the app
+points at the folder it was built from.
 
 ---
 
@@ -33,36 +69,21 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 and presents the result for review. Polishing is deliberately disabled
 ([ADR 0001](docs/decisions/0001-defer-local-polishing-model.md)).
 
-The desktop app never pastes (Copy only). The hotkey pastes only `safe_to_paste` results, which is what CLAUDE.md
-§4.2 permits — `review_required` and `rejected` open a modal dialog and take a
+The desktop app never pastes (Copy only). The hotkey pastes only
+`safe_to_paste` results, which is what CLAUDE.md §4.2 permits — `review_required` and `rejected` open a modal dialog and take a
 second, explicit click. "Safe" means no protected content changed; it does not
 mean every word is right. Named-entity accuracy is 62.5% and ~1 dictation in 8
-is flagged for review, so start with email and research dictation rather than
-direct entry into a record (CLAUDE.md §6 Phase 8).
+is flagged for review. Use it for email and research dictation only — never
+for clinical text or patient information.
 
 ---
 
 ## Setup
 
-Requires macOS on Apple Silicon.
-
-```bash
-brew install cmake ffmpeg
-
-git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp
-sh ./models/download-ggml-model.sh large-v3-turbo
-cmake -B build
-cmake --build build -j --config Release
-cd ..
-
-python3 -m venv .venv
-```
-
-`whisper.cpp/`, `models/`, `.venv/`, and `runtime/` are excluded from git.
-
-Setup needs network access to fetch the model and dependencies. **Runtime does
-not** — that is the point, and it is verified in §Offline below.
+See [Install on your Mac](#install-on-your-mac). `scripts/bootstrap_macos.sh`
+does every step; `whisper.cpp/`, `.venv/`, and `runtime/` are excluded from
+git. Setup needs the network once; **runtime does not**, and that is verified
+in §Offline below.
 
 ---
 
