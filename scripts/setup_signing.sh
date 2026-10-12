@@ -3,7 +3,7 @@
 #
 # WHY. build_app.sh used to sign ad hoc. An ad-hoc signature's designated
 # requirement is the build's cdhash, and macOS privacy grants (Microphone,
-# Accessibility, Automation, Documents) attach to that requirement -- so every
+# Automation, Documents) attach to that requirement -- so every
 # rebuild looked like a new application and the grants silently stopped
 # applying. Signed with a fixed certificate, the requirement becomes
 # `identifier "local.whispern" and certificate leaf = H"<cert hash>"`, which

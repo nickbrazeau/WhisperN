@@ -21,8 +21,8 @@ microphone → VAD gate → whisper.cpp → normalize → validate → review
 Rewrite mode is for email and research only. It runs on a loopback-only
 Ollama (`scripts/setup_ollama.sh`, `OLLAMA_NO_CLOUD=1`). The GUI starts every
 launch in Raw; Rewrite is chosen per session in the header, or applied to the
-current draft with the **Rewrite** button. A rewrite is never pasted without a
-click, and the original is shown beside it with "Paste original".
+current draft with the **Rewrite** button. A rewrite leaves the app only on a
+click, and the original is shown beside it with "Copy original".
 
 Three front ends:
 
@@ -33,9 +33,9 @@ Three front ends:
   `review_required` and `rejected` open a read-only dialog needing an
   explicit click. `AUTO_PASTE = false` in `init.lua` reverts it to
   clipboard-only.
-- `WhisperN.app` / `scripts/whispern_app.py` (desktop GUI) — pastes at the
-  cursor, only `safe_to_paste`, only when auto-paste is ticked. See §6.3.
-  The draft (transcript or rewrite) is editable: Copy and Paste send it as
+- `WhisperN.app` / `scripts/whispern_app.py` (desktop GUI) — **never
+  pastes**. Text stays in the window until you click Copy. See §6.3.
+  The draft (transcript or rewrite) is editable: Copy sends it as
   edited. Notes, warnings, and the original sit in a read-only pane below.
 
 The bundle is built by `scripts/build_app.sh`; its executable is a compiled
@@ -49,11 +49,12 @@ requirement `identifier "local.whispern" and certificate leaf =
 H"d5babfe957bfcb20fd32616dc7edb154078b3a5a"`, which is identical across
 rebuilds, so grants survive them. Without the identity, `build_app.sh` falls
 back to ad hoc, whose requirement is the build's cdhash and changes every
-build. If recording or pasting ever stops working, run `tccutil reset All
+build. If recording ever stops working, run `tccutil reset All
 local.whispern` and grant again. To remove the identity:
 `security delete-identity -c "WhisperN Local Signing"`. Privacy grants
-(Microphone, Accessibility, Automation) attach to `WhisperN.app` rather than to
-a terminal.
+(Microphone, Automation) attach to `WhisperN.app` rather than to a terminal.
+The GUI needs no Accessibility; if an old grant is still listed under
+Privacy & Security → Accessibility, it can be switched off.
 
 **Verifying the hotkey is live.** Hammerspoon logs nothing externally, so
 `init.lua` writes `runtime/tmp/hammerspoon-status.txt` on load, carrying the
@@ -72,9 +73,9 @@ take. It never contains transcript text.
 | 3 | Cloud fallback is disabled | **Yes** — no cloud code path; non-loopback endpoints refused at construction |
 | 4 | Temporary audio is deleted | **Yes** — verified, including after SIGTERM |
 | 5 | Transcript logging is disabled | **Yes** — verified no source path logs transcript text |
-| 6 | Protected-token validator is active | **Yes** — 138 tests passing |
+| 6 | Protected-token validator is active | **Yes** — 135 tests passing |
 | 7 | `clinical_strict` requires review on protected change | **Changed by owner decision, 2026-10-07.** Mode is now `medical`. A protected change, or a drug-like word outside the vocabulary, still forces `review_required`; a result with only warnings no longer does, and may auto-paste. To restore, see §5.7 |
-| 8 | Synthetic adversarial tests pass | **Yes** — 138 tests; 21/21 polisher cases (unused). Rewrite cases: 12/14 typed, 9/14 through audio (`docs/validation-report.md` §2a) |
+| 8 | Synthetic adversarial tests pass | **Yes** — 135 tests; 21/21 polisher cases (unused). Rewrite cases: 12/14 typed, 9/14 through audio (`docs/validation-report.md` §2a) |
 | 9 | **The user has reviewed the glossary** | **Yes — reviewed 2026-07-27** |
 | 10 | The user has reviewed all exact replacements | **Vacuously satisfied** — all 4 rules are `enabled: false`; none active. See §6 before enabling any |
 | 11 | Active model and configuration documented | **Yes** — §3 below |
@@ -127,7 +128,7 @@ Run all three. Any failure blocks deployment.
 
 ```bash
 scripts/offline_smoke_test.sh                # expect 22 pass, 0 fail, 0 warn
-.venv/bin/python -m pytest tests/ -q         # expect 138 passed
+.venv/bin/python -m pytest tests/ -q         # expect 135 passed
 scripts/record_baseline.sh --check           # expect microphone OK
 ```
 
@@ -299,50 +300,38 @@ negation, dose, units, or laterality, human approval, and a rollback entry.
 spoken, and a different cephalosporin misheard the same way would be silently
 replaced with the wrong drug.
 
-### 6.3 The paste path
+### 6.3 No paste: text stays in the app
 
-Implemented in the desktop GUI only (`scripts/whispern_app.py`). The FN-hold
-Hammerspoon path remains clipboard-only and does not paste.
+Since 2026-10-11 (owner decision) the desktop GUI never pastes. It does not
+activate, type into, or even watch which application is frontmost, and it
+never writes the clipboard on its own. Every result — `safe_to_paste`,
+`review_required`, `rejected`, or a rewrite — is shown in the window with its
+flags, and leaves only when the user clicks **Copy** or **Copy original**.
+The user pastes it themselves. The app therefore needs no Accessibility
+permission; Automation is used only to pause and resume music players
+(§6.4).
 
-**What it will paste.** `safe_to_paste` results, and only when the
-"Auto-paste safe results" box is ticked. `review_required` and `rejected` are
-never pasted automatically under any setting; pasting those takes a second,
-deliberate click after reading. This is enforced by a source-level test
-(`test_gui_never_auto_pastes_unsafe_results`) because the guarantee is a
-branch that a refactor could silently move.
+Two source-level tests hold this: `test_gui_never_types_into_other_apps`
+(no `osascript`, System Events, keystroke, or frontmost tracking in the
+code) and `test_gui_touches_the_clipboard_only_on_a_click` (only the Copy
+handlers call the clipboard). Both were checked to fail when a paste or an
+automatic copy is put back.
 
 **The standing caveat.** "Safe" means no protected token changed. It does not
-mean the words are right: pasted `safe_to_paste` output still contains a
+mean the words are right: `safe_to_paste` output still contains a
 mis-transcribed drug or organism name roughly one time in three, because the
 validator cannot detect a *real* word used wrongly
-(`docs/validation-report.md` §3.2). Read what you paste.
+(`docs/validation-report.md` §3.2). Read what you copy.
 
-**Where it pastes.** ⌘V goes to whatever macOS considers frontmost, so the app
-samples which application was frontmost before it took focus, activates that
-app explicitly, confirms it really is frontmost, and only then sends the
-keystroke. The target is shown in the title bar (`→ Notes`).
-
-It **fails closed**: no known target, the target having quit, or any other app
-being frontmost at the instant of the keystroke means nothing is typed
-anywhere and the text is left on the clipboard. That asymmetry is deliberate —
-a transcript pasted into the wrong window is worse than one not pasted, and
-during development a best-effort implementation did exactly that, typing test
-markers into a terminal.
-
-**Do not "fix" this by hiding the window.** An earlier implementation called
-`withdraw()` to yield focus. macOS does not transfer frontmost status that
-way: the keystroke reached the hidden window and was discarded, 0/9 at delays
-from 250 ms to 1200 ms, while `osascript` still exited 0 so the UI reported a
-green "Pasted" for a paste that never happened. Because the text is copied
-first, a manual ⌘V made it look like it worked. Guarded by
-`test_gui_paste_does_not_hide_the_window`.
-
-**Measured** (2026-07-31, 10 trials pinned to TextEdit): 10/10 delivered,
-0 misdirected, ~380 ms per paste. Separately verified through the real
-`WhisperNApp._render` auto-paste path: status `Pasted → TextEdit`, text
-delivered, and the window sampled `normal` on every tick — it is never
-hidden. `offline_smoke_test.sh` still passes 16/16 with the paste path in
-place, and the audit report contains no clinical terms.
+**History.** Until 2026-10-11 the GUI auto-pasted `safe_to_paste` results by
+activating the previous application and sending ⌘V through System Events
+(measured 2026-07-31: 10/10 delivered into TextEdit, 0 misdirected). It was
+removed at the owner's request, not because it failed. Lessons worth keeping
+if it is ever rebuilt: verify the target is frontmost inside the same
+osascript that sends the keystroke and fail closed otherwise (a best-effort
+version typed test markers into a terminal), and never yield focus with
+`withdraw()` — macOS does not transfer frontmost status that way, so the
+keystroke was discarded while `osascript` still exited 0.
 
 ### 6.4 Microphone selection and music
 
@@ -424,8 +413,8 @@ Matches CLAUDE.md §9.
 - **Clipboard history is a leakage path.** Every copy from the GUI and from
   `dictate.py --copy` is marked `org.nspasteboard.ConcealedType` and
   `TransientType`, which most clipboard managers honour by not recording it.
-  The GUI also empties the clipboard 1.5 s after a confirmed paste, after
-  2 minutes otherwise, and on quit — each only if nothing else was copied
+  The GUI writes the clipboard only when Copy is clicked, and empties it
+  after 2 minutes and on quit — each only if nothing else was copied
   since. A manager that ignores the convention still records the text, so
   check yours before dictating patient content.
 - **Ollama upgrades change the rewrite runtime.** It is pinned

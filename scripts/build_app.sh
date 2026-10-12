@@ -7,7 +7,7 @@
 #
 # WHY A BUNDLE AT ALL, beyond not keeping a terminal open. macOS attributes
 # privacy permissions to the *application*, so running the GUI from a terminal
-# grants Microphone, Accessibility, and Automation to Terminal itself -- to
+# grants Microphone and Automation to Terminal itself -- to
 # every command anyone ever runs there. A bundle with a stable identifier owns
 # those grants alone, which is both less alarming in System Settings and a
 # tighter blast radius.
@@ -71,7 +71,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSMicrophoneUsageDescription</key>
     <string>WhisperN records your dictation and transcribes it on this Mac. Audio is never uploaded and is deleted immediately after transcription.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>WhisperN needs to know which application you are typing into so it can paste your dictation there, and nowhere else.</string>
+    <string>WhisperN pauses music players while you record and resumes them afterwards. It never sends text or keystrokes to other applications.</string>
     <key>NSDocumentsFolderUsageDescription</key>
     <string>WhisperN runs from a folder in Documents: its code, speech model, and temporary audio live there. Nothing is uploaded.</string>
     <key>NSSpeechRecognitionUsageDescription</key>

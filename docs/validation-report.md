@@ -160,7 +160,8 @@ The harness takes real recordings with `--audio-dir` (files named
 ### Clipboard
 
 Copies are marked `org.nspasteboard.ConcealedType` and `TransientType`, and
-the GUI clears the clipboard after a paste, after 2 minutes, and on quit,
+the GUI writes the clipboard only on a Copy click and clears it after
+2 minutes and on quit,
 only if nothing else was copied since. Verified in `tests/test_clipboard.py`
 on a private named pasteboard, and through the app's own timer path. Whether
 a given clipboard manager honours the markers is not verified here.
@@ -232,12 +233,12 @@ Since 2026-10-07 the default mode is `medical`, not `clinical_strict` (owner
 decision): a result with validator warnings but no protected change may now
 auto-paste. Protected changes still never auto-paste.
 
-A paste-at-cursor path exists in the desktop GUI (`scripts/whispern_app.py`)
-and is **off for everything except `safe_to_paste`**. `review_required` and
-`rejected` are never pasted automatically under any setting. This does not
-change the judgement above: "safe" means no protected token changed, not that
-every word is right, so the one-in-three named-entity caveat still applies to
-anything pasted. See `docs/deployment.md` §6.3.
+Since 2026-10-11 the desktop GUI (`scripts/whispern_app.py`) never pastes:
+every result stays in its window until the user clicks Copy. The Hammerspoon
+hotkey still pastes `safe_to_paste` results. Either way, "safe" means no
+protected token changed, not that every word is right, so the one-in-three
+named-entity caveat still applies to anything copied or pasted. See
+`docs/deployment.md` §6.3.
 
 CLAUDE.md §6 Phase 8 directs starting with nonclinical email and research
 dictation, and not beginning with direct entry into a medical record. The
@@ -249,7 +250,7 @@ evidence here supports that sequencing.
 
 ```bash
 scripts/offline_smoke_test.sh                      # 22 privacy/offline checks
-.venv/bin/python -m pytest tests/ -q               # 138 tests
+.venv/bin/python -m pytest tests/ -q               # 135 tests
 scripts/eval_rewrite_audio.py                      # rewrite mode, audio to rewrite (§2a)
 scripts/benchmark.py runtime/tmp/corpus_prompted2 runtime/tmp/heldout_syn
 ```

@@ -5,45 +5,31 @@ A window around the same pipeline `scripts/dictate.py` uses. Nothing here
 transcribes, edits, or validates anything: it starts a recording, hands the
 audio to `DictationPipeline`, and renders what comes back.
 
-PASTE BEHAVIOUR, and why it is not uniform:
-
-  safe_to_paste    pasted automatically (CLAUDE.md §6 Phase 5.4)
-  review_required  NEVER pasted automatically (CLAUDE.md §4.2). The text is
-                   shown with every warning, and pasting requires a second,
-                   explicit click after reading.
-  rejected         never pasted automatically; the raw transcript is offered
-  no_speech        nothing happens
+TEXT STAYS IN THE APP. WhisperN never pastes into, types into, or activates
+another application, and never touches the clipboard on its own. Every result
+-- safe_to_paste, review_required, or rejected -- is shown in the window with
+its warnings, and leaves only when the user clicks Copy (or Copy original).
+The user pastes it themselves. So the app needs no Accessibility permission.
 
 REWRITE MODE (ADR 0002, email and research only) sends the transcript to a
 local model that rewrites it as concise prose. Every rewrite is
 review_required: it is shown above the original transcript with any protected
-facts that moved, and pastes only on a click. "Paste original" is always
-offered beside it. The Rewrite button rewrites whatever is in the draft, so a
-Raw take can be rewritten without dictating again.
+facts that moved. "Copy original" is always offered beside it. The Rewrite
+button rewrites whatever is in the draft, so a Raw take can be rewritten
+without dictating again.
 
-The draft (transcript or rewrite) is editable. Copy and Paste send the draft
-as edited; auto-paste of a safe result sends it as transcribed.
+The draft (transcript or rewrite) is editable. Copy sends the draft as edited.
 
 "Safe" means no protected content changed. It does NOT mean every word is
 correct: named-entity accuracy is 62.5%, so roughly one distinctive drug or
 organism name in three is wrong (docs/validation-report.md §3.3). Read what you
-paste.
-
-Pasting synthesises ⌘V, which requires Accessibility permission for whatever
-process runs this. The app detects that and says so rather than failing
-silently.
+copy.
 
 Prefer launching through the bundle built by `scripts/build_app.sh`: macOS
 attributes privacy grants to the application, so running this from a terminal
-grants Microphone, Accessibility, and Automation to that terminal and to every
-command anyone ever runs in it. The bundle owns those grants alone.
-
-⌘V goes wherever macOS thinks the front application is, so the app tracks
-which application you came from and activates it explicitly before typing.
-That target is shown in the title bar. If it is unknown, or if the app is not
-actually frontmost when the keystroke is about to be sent, nothing is typed
-anywhere and the text is left on the clipboard -- misdirecting clinical text
-into the wrong window is worse than not pasting at all.
+grants Microphone and Automation (used only to pause music while recording) to
+that terminal and to every command anyone ever runs in it. The bundle owns
+those grants alone.
 
 Usage:
   scripts/whispern_app.py
@@ -100,29 +86,10 @@ BLUE    = ROYAL
 BLUE_BTN     = ROYAL
 BLUE_BTN_DIM = "#9DB3CE"
 
-# How often to sample which application is frontmost. Each sample costs one
-# osascript process (~60-80 ms of subprocess, not of this thread). Lower is
-# fresher; higher is cheaper. 1 s keeps the target correct even if you switch
-# apps immediately before recording.
-POLL_SECONDS = 1.0
-
-# How long dictated text stays on the clipboard (CLAUDE.md §3.1: clipboard is a
-# leakage path). After a confirmed paste the target app has already read it;
-# otherwise it is left long enough to ⌘V by hand. Cleared only if nothing else
-# was copied since, so the user's own later copy is never wiped.
-CLIPBOARD_AFTER_PASTE_MS = 1500
+# How long copied text stays on the clipboard (CLAUDE.md §3.1: clipboard is a
+# leakage path): long enough to ⌘V by hand. Cleared only if nothing else was
+# copied since, so the user's own later copy is never wiped.
 CLIPBOARD_TTL_MS = 120_000
-
-_FRONTMOST = 'tell application "System Events" to get name of first process whose frontmost is true'
-
-
-def _osa(script: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["osascript", "-e", script], capture_output=True)
-
-
-def _as_literal(s: str) -> str:
-    """Escape a string for interpolation into an AppleScript literal."""
-    return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
 class FlatButton(tk.Label):
@@ -197,99 +164,6 @@ class FlatButton(tk.Label):
             self._command()
 
 
-class FocusTracker:
-    """Remembers the last application that was frontmost other than this one.
-
-    ⌘V is delivered to whatever macOS considers frontmost, so pasting at the
-    cursor requires knowing which application the user came from. macOS offers
-    no way to ask for "the previous app": System Events reports only the
-    current frontmost process, and its process list is not in front-to-back
-    order (verified: our own process appeared second-to-last while frontmost).
-    So the answer has to be sampled before we take focus.
-
-    PRIVACY (CLAUDE.md §3.1): this records application *names* only -- never a
-    window title, document name, or any content. In memory only. Never
-    logged, never written to disk, never placed in the audit trail. It is
-    discarded when the app exits.
-    """
-
-    def __init__(self, poll_seconds: float = POLL_SECONDS,
-                 self_name: str | None = None) -> None:
-        self.poll_seconds = poll_seconds
-        self._target: str | None = None
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-        if self_name is None:
-            # Identify ourselves by PID, not by guessing "python" vs
-            # "python3" -- both appear in a normal process list.
-            r = _osa('tell application "System Events" to get name of first '
-                     f'process whose unix id is {os.getpid()}')
-            self_name = r.stdout.decode(errors="replace").strip()
-        self.self_name = self_name or "python"
-
-    @property
-    def target(self) -> str | None:
-        return self._target
-
-    def consider(self, name: str | None) -> None:
-        """Record `name` as the paste target unless it is us or empty.
-
-        Split out from the poll loop so it can be tested without a GUI.
-        """
-        if name and name != self.self_name:
-            self._target = name
-
-    def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop.set()
-
-    def _run(self) -> None:
-        while not self._stop.is_set():
-            r = _osa(_FRONTMOST)
-            if r.returncode == 0:
-                self.consider(r.stdout.decode(errors="replace").strip())
-            self._stop.wait(self.poll_seconds)
-
-
-def paste_into(process_name: str) -> tuple[str, str]:
-    """Activate `process_name`, confirm it really is frontmost, then send ⌘V.
-
-    Activation and verification happen inside a single osascript so nothing can
-    steal focus between the two, and so the whole handoff costs one process
-    rather than three.
-
-    The verification is the safety property, not a nicety. Without it a stale
-    or wrong target sends clinical text into whatever happens to be frontmost
-    -- during development this pasted test markers into a terminal. Returns
-    ("pasted"|"abort"|"error", detail).
-    """
-    lit = _as_literal(process_name)
-    script = f'''
-    tell application "System Events"
-      set procs to every process whose name is "{lit}"
-      if (count of procs) = 0 then return "abort:gone"
-      set frontmost of item 1 of procs to true
-      delay 0.08
-      set f to name of first process whose frontmost is true
-      if f is not "{lit}" then return "abort:" & f
-      keystroke "v" using command down
-      return "pasted"
-    end tell
-    '''
-    r = _osa(script)
-    if r.returncode != 0:
-        return "error", r.stderr.decode(errors="replace").strip()
-    out = r.stdout.decode(errors="replace").strip()
-    if out == "pasted":
-        return "pasted", process_name
-    if out.startswith("abort:"):
-        return "abort", out[len("abort:"):]
-    return "error", out or "no result"
-
-
 class WhisperNApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -306,7 +180,6 @@ class WhisperNApp:
         self.model = cfg.get("polishing.model", "")
         self.prefer_mic = cfg.get("recording.prefer_microphone", "headset")
         self.pause_music = cfg.get("recording.pause_music", "true").lower() == "true"
-        self.auto_paste = tk.BooleanVar(value=True)
         self.rewrite_model = cfg.get("rewrite.model", "")
         self.rewrite_on = (cfg.get("rewrite.enabled", "false").lower() == "true"
                            and cfg.get("rewrite.default_on", "false").lower() == "true")
@@ -359,10 +232,6 @@ class WhisperNApp:
             rewriter=rewriter,
         )
 
-        # Must exist before _build_ui, which renders the current target.
-        self.focus = FocusTracker()
-        self.focus.start()
-
         self._build_ui()
         self.root.after(80, self._drain)
 
@@ -403,13 +272,10 @@ class WhisperNApp:
         self.seg_raw.bind("<Button-1>", lambda e: self.set_rewrite(False))
         self.seg_rw.bind("<Button-1>", lambda e: self.set_rewrite(True))
 
-        # Where a paste would land, and which microphone is live. Both visible
-        # before recording: a wrong target or a silent virtual driver must be
-        # caught before any text exists to misdirect.
-        self.target_lbl = tk.Label(bar, text="", bg=NAVY, font=small)
-        self.target_lbl.pack(side="right", padx=(6, 16))
+        # Which microphone is live, visible before recording: a silent virtual
+        # driver must be caught before a take is wasted on it.
         self.mic_lbl = tk.Label(bar, text="", bg=NAVY, font=small)
-        self.mic_lbl.pack(side="right", padx=6)
+        self.mic_lbl.pack(side="right", padx=(6, 16))
 
         # --- mode strip (CLAUDE.md §6 Phase 5.10) --------------------------
         strip = tk.Frame(r, bg=HATTERAS, height=28)
@@ -417,8 +283,8 @@ class WhisperNApp:
         strip.pack_propagate(False)
         self.mode_lbl = tk.Label(strip, text="", bg=HATTERAS, fg=NAVY, font=small)
         self.mode_lbl.pack(side="left", padx=16)
-        self.paste_lbl = tk.Label(strip, text="", bg=HATTERAS, font=small)
-        self.paste_lbl.pack(side="right", padx=16)
+        tk.Label(strip, text="stays in WhisperN · Copy to take it out",
+                 bg=HATTERAS, fg=GREEN, font=small).pack(side="right", padx=16)
 
         # --- record ---------------------------------------------------------
         top = tk.Frame(r, bg=BG)
@@ -437,8 +303,8 @@ class WhisperNApp:
         # their place at the bottom when the window is short.
         card = tk.Frame(r, bg=PANEL, highlightthickness=1,
                         highlightbackground="#D5DAE3", highlightcolor="#D5DAE3")
-        # The draft: the only text Paste and Copy ever use. Editable, so a
-        # wrong word is fixed here rather than in the target app.
+        # The draft: the only text Copy ever uses. Editable, so a wrong word
+        # is fixed here before it leaves the app.
         self.draft_lbl = tk.Label(card, text="", bg=PANEL, fg=ROYAL, font=head,
                                   anchor="w", padx=20)
         self.draft_lbl.pack(fill="x", pady=(12, 0))
@@ -496,23 +362,12 @@ class WhisperNApp:
         act.pack(fill="x", side="bottom", padx=16, pady=(10, 14))
         card.pack(fill="both", expand=True, padx=16)
 
-        tk.Checkbutton(
-            act, text="Auto-paste safe results", variable=self.auto_paste,
-            command=self._update_paste_label, bg=BG, fg=FG, font=small,
-            activebackground=BG, activeforeground=FG,
-            highlightthickness=0, bd=0,
-        ).pack(side="left")
-
-        self.paste_btn = FlatButton(act, text="Paste", command=self.paste_now,
-                                    style="primary", font=ui_bold, padx=20, pady=7,
-                                    state="disabled")
-        self.paste_btn.pack(side="right", padx=(8, 0))
         self.copy_btn = FlatButton(act, text="Copy", command=self.copy_now,
-                                   style="secondary", font=ui, padx=16, pady=7,
+                                   style="primary", font=ui_bold, padx=20, pady=7,
                                    state="disabled")
         self.copy_btn.pack(side="right")
         # Only enabled for a rewrite: the way back to exactly what was said.
-        self.orig_btn = FlatButton(act, text="Paste original", command=self.paste_original,
+        self.orig_btn = FlatButton(act, text="Copy original", command=self.copy_original,
                                    style="secondary", font=ui, padx=16, pady=7,
                                    state="disabled")
         self.orig_btn.pack(side="right", padx=(0, 8))
@@ -524,8 +379,6 @@ class WhisperNApp:
 
         self._set_draft("", "")
         self._update_rewrite_label()
-        self._update_paste_label()
-        self._update_target_label()
         self._update_mic_label()
 
         # Cmd+W, replacing macOS's usual close-window meaning in this app only.
@@ -572,20 +425,6 @@ class WhisperNApp:
             text = f"Raw transcript · {self.mode} · {pol} · VAD on"
         self.mode_lbl.configure(text=text)
 
-    def _update_paste_label(self) -> None:
-        on = self.auto_paste.get()
-        self.paste_lbl.configure(
-            text="auto-paste: safe only" if on else "auto-paste: off",
-            fg=AMBER if on else GREEN,
-        )
-
-    def _update_target_label(self) -> None:
-        t = self.focus.target
-        self.target_lbl.configure(
-            text=f"→ {t}" if t else "→ no target",
-            fg=HATTERAS if t else DANDELION,
-        )
-
     def _update_mic_label(self) -> None:
         d = self.device
         self.mic_lbl.configure(
@@ -621,8 +460,7 @@ class WhisperNApp:
 
     def _update_action_buttons(self) -> None:
         has = bool(self._draft_text()) and not (self.recording or self.busy)
-        for b in (self.copy_btn, self.paste_btn):
-            b.configure(state="normal" if has else "disabled")
+        self.copy_btn.configure(state="normal" if has else "disabled")
         rw_ok = has and self.pipeline.rewriter is not None
         self.rw_btn.configure(state="normal" if rw_ok else "disabled")
 
@@ -728,7 +566,7 @@ class WhisperNApp:
         """Rewrite the draft as it stands, including any edits (ADR 0002).
 
         Lets a Raw take be rewritten without re-dictating. The result is a
-        rewrite like any other: shown for review, pasted only on a click.
+        rewrite like any other: shown for review, copied only on a click.
         """
         source = self._draft_text()
         if self.busy or self.recording or not source or self.pipeline.rewriter is None:
@@ -774,7 +612,6 @@ class WhisperNApp:
                     self._show([(str(payload), "bad")])
         except queue.Empty:
             pass
-        self._update_target_label()
         self._update_mic_label()
         self.root.after(80, self._drain)
 
@@ -811,17 +648,11 @@ class WhisperNApp:
             if result.warnings:
                 chunks.append(("NOTES\n", "h_warn"))
                 chunks += [(f"•  {w}\n", "warn") for w in result.warnings]
-            chunks.append(("Pasted. Edit above and Paste again if needed.\n"
-                           if self.auto_paste.get() else
-                           "On the clipboard. Edit above, then Paste or Copy.\n", "note"))
+            chunks.append(("Edit above if needed, then Copy.\n", "note"))
             self._show(chunks)
-            if self.auto_paste.get():
-                self.root.after(60, lambda: self._paste(text))
-            else:
-                self._copy(text)
             return
 
-        # review_required / rejected: never auto-pasted, whatever the setting.
+        # review_required / rejected: shown with every reason, like all results.
         label = ("Review required" if result.outcome is Outcome.REVIEW
                  else "Rejected")
         self.status.configure(text=label, fg=AMBER if result.outcome is Outcome.REVIEW else RED)
@@ -835,13 +666,11 @@ class WhisperNApp:
             chunks.append(("WARNINGS\n", "h_warn"))
             for w in result.warnings:
                 chunks.append((f"•  {w}\n", "warn"))
-        chunks.append(("Not pasted. Read it, edit above if needed, then Paste "
-                       "or Copy.\n", "note"))
+        chunks.append(("Read it, edit above if needed, then Copy.\n", "note"))
         self._show(chunks)
-        self._copy(text)
 
     def _render_rewrite(self, result) -> None:
-        """Rewrite first, original beneath, then what moved. Never pasted here."""
+        """Rewrite first, original beneath, then what moved."""
         secs = (result.transcribe_ms + result.polish_ms) / 1000
         self.status.configure(text=f"Rewrite ready — review · {secs:.1f} s", fg=AMBER)
         self.orig_btn.configure(state="normal")
@@ -867,10 +696,9 @@ class WhisperNApp:
                 chunks.append((f"•  {w}\n", "warn"))
         chunks.append(("WHAT YOU SAID\n", "h_dim"))
         chunks.append((result.raw_text + "\n", "orig"))
-        chunks.append(("Not pasted. Read the rewrite, edit above if needed, then "
-                       "Paste — or Paste original.\n", "note"))
+        chunks.append(("Read the rewrite, edit above if needed, then Copy — or "
+                       "Copy original.\n", "note"))
         self._show(chunks)
-        self._copy(result.polished_text)
 
     # ------------------------------------------------------------ clipboard
 
@@ -889,8 +717,9 @@ class WhisperNApp:
     def clear_clipboard_now(self) -> None:
         clipboard.clear_if_unchanged(getattr(self, "_clip_count", None))
 
-    # Copy and Paste use the draft as it stands, edits included: what the
-    # user sees in the box is exactly what lands in the target app.
+    # Copy uses the draft as it stands, edits included: what the user sees in
+    # the box is exactly what leaves the app. Nothing reaches the clipboard
+    # except through these two clicks.
 
     def copy_now(self) -> None:
         text = self._draft_text()
@@ -898,68 +727,10 @@ class WhisperNApp:
             self._copy(text)
             self.status.configure(text="Copied", fg=GREEN)
 
-    def paste_now(self) -> None:
-        text = self._draft_text()
-        if text:
-            self._paste(text)
-
-    def paste_original(self) -> None:
+    def copy_original(self) -> None:
         if self.result and self.result.raw_text:
-            self._paste(self.result.raw_text)
-
-    def _paste(self, text: str) -> None:
-        """Copy, then send ⌘V to the application the user came from.
-
-        The window is NOT hidden. A previous implementation called withdraw()
-        to yield focus, on the theory that macOS would hand frontmost status
-        back to the previous app. It does not: measured 0/9 delivery at sleeps
-        from 250 ms to 1200 ms, because the keystroke went to our own hidden
-        window and was discarded. osascript still exited 0, so the UI reported
-        a green "Pasted" for a paste that never happened. Activating the
-        target explicitly is what actually delivers, and it removes the
-        window-blink at the same time.
-
-        The text is always on the clipboard first, so every failure path below
-        still leaves the user a working ⌘V.
-        """
-        self._copy(text)
-
-        target = self.focus.target
-        if not target:
-            # Fail closed. Sending ⌘V to an unknown frontmost app is how
-            # clinical text ends up in the wrong window.
-            self.status.configure(text="Not pasted — no target app", fg=AMBER)
-            self._show([
-                ("Not pasted: no target application known yet.\n", "warn"),
-                ("Click into the app you want this in, then press Paste.\n"
-                 "The text is on the clipboard for 2 minutes; ⌘V works.\n", "dim"),
-            ])
-            return
-
-        status, detail = paste_into(target)
-
-        if status == "pasted":
-            self.status.configure(text=f"Pasted → {target}", fg=GREEN)
-            self._schedule_clipboard_clear(CLIPBOARD_AFTER_PASTE_MS)
-        elif status == "abort":
-            where = "it quit" if detail == "gone" else f"focus was {detail}"
-            self.status.configure(text=f"Not pasted — {where}", fg=AMBER)
-            self._show([
-                (f"Not pasted: expected {target} to be frontmost but {where}.\n", "warn"),
-                ("Nothing was typed anywhere. The text is on the clipboard "
-                 "for 2 minutes; ⌘V works.\n", "dim"),
-            ])
-        elif "not allowed" in detail or "1002" in detail:
-            self.status.configure(text="Paste blocked — grant Accessibility", fg=RED)
-            self._show([
-                ("Pasting needs Accessibility permission.\n", "bad"),
-                ("System Settings → Privacy & Security → Accessibility, then "
-                 "add WhisperN — or, if you launched this from a terminal, "
-                 "that terminal.\n\n", "dim"),
-                ("The text is on the clipboard for 2 minutes; ⌘V works.\n", "dim"),
-            ])
-        else:
-            self.status.configure(text="Paste failed", fg=RED)
+            self._copy(self.result.raw_text)
+            self.status.configure(text="Copied original", fg=GREEN)
 
 
 def main() -> int:
@@ -968,7 +739,6 @@ def main() -> int:
     try:
         root.mainloop()
     finally:
-        app.focus.stop()
         # Quitting mid-recording must not leave music paused for good.
         app._resume_music()
         # Do not leave dictated text behind on the clipboard after quitting.

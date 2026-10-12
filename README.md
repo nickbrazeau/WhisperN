@@ -22,18 +22,18 @@ execution plan. **`CLAUDE.md` is the authority**; this README is orientation onl
 | 2 | Medical terminology in ASR | Complete — in-sample only; [does not generalize](docs/phase2-results.md#8a-held-out-evaluation--the-prompt-does-not-generalize) |
 | 3 | Constrained medical polishing | Built, **deferred** — [ADR 0001](docs/decisions/0001-defer-local-polishing-model.md) |
 | 4 | Protected-token validator | Complete — [40/40 tests, 100% precision](docs/phase4-results.md) |
-| 5 | Desktop integration | Complete — VAD gate, review interface, global ⌘FN hotkey, paste at cursor or anchor |
+| 5 | Desktop integration | Complete — VAD gate, review interface, global ⌘FN hotkey; the app keeps text in its window (Copy only), the hotkey can paste |
 | 6 | Synthetic medical test suite | Complete — [gate passed](docs/phase6-results.md); named-entity accuracy 62.5% |
 | 7 | Offline and privacy verification | Complete — [16/16 checks](docs/validation-report.md) |
 | 8 | Deployment | Checklist complete — [guide](docs/deployment.md); glossary reviewed 2026-07-27 |
-| — | Email/research rewrite mode | Added 2026-10-07 — [ADR 0002](docs/decisions/0002-email-research-rewrite-mode.md); always click-to-paste |
+| — | Email/research rewrite mode | Added 2026-10-07 — [ADR 0002](docs/decisions/0002-email-research-rewrite-mode.md); always click-to-copy |
 
-**Usable for raw-transcript dictation. Read what it pastes.**
+**Usable for raw-transcript dictation. Read what it gives you.**
 `scripts/dictate.py` records, gates on voice activity, transcribes, validates,
 and presents the result for review. Polishing is deliberately disabled
 ([ADR 0001](docs/decisions/0001-defer-local-polishing-model.md)).
 
-Pasting is enabled only for `safe_to_paste` results, which is what CLAUDE.md
+The desktop app never pastes (Copy only). The hotkey pastes only `safe_to_paste` results, which is what CLAUDE.md
 §4.2 permits — `review_required` and `rejected` open a modal dialog and take a
 second, explicit click. "Safe" means no protected content changed; it does not
 mean every word is right. Named-entity accuracy is 62.5% and ~1 dictation in 8
@@ -68,7 +68,7 @@ not** — that is the point, and it is verified in §Offline below.
 
 ## Usage
 
-Desktop app — record, review, and paste. Build it once as a real macOS
+Desktop app — record, review, and copy. Build it once as a real macOS
 application and launch it from the Dock:
 
 ```bash
@@ -82,8 +82,8 @@ scripts/whispern_app.py
 ```
 
 **Prefer the bundle.** macOS attributes privacy grants to the application, so
-running the GUI from a terminal grants Microphone, Accessibility, and
-Automation to that terminal — and therefore to every command anyone ever runs
+running the GUI from a terminal grants Microphone and Automation (used only to
+pause music while you record) to that terminal — and therefore to every command anyone ever runs
 in it. `WhisperN.app` owns those grants alone. The bundle is a launcher, not a
 copy: it runs the Python out of this repo, so edits take effect on the next
 launch. Rebuild after moving the repo, because the launcher hardcodes its path.
@@ -102,14 +102,16 @@ allow again:
 tccutil reset All local.whispern && open -a WhisperN
 ```
 
-⌘W (Cmd+W) to start/stop while the WhisperN window is focused. Safe results
-paste at the cursor; anything needing review is shown and must be pasted
-deliberately.
+⌘W (Cmd+W) to start/stop while the WhisperN window is focused. Every result
+stays in the WhisperN window, with any review flags beside it. The app never
+pastes into another application and never touches the clipboard on its own:
+click **Copy** (or **Copy original** after a rewrite), then paste it yourself.
+It needs no Accessibility permission.
 
 **Rewrite mode (email and research only).** Click the **REWRITE** switch in the
 mode bar. A local model rewrites the dictation as concise, professional prose,
-shown above the original transcript, and nothing pastes until you click
-**Paste** or **Paste original**. Never use it for clinical notes
+shown above the original transcript, and nothing leaves the app until you
+click **Copy** or **Copy original**. Never use it for clinical notes
 ([ADR 0002](docs/decisions/0002-email-research-rewrite-mode.md)). One-time setup:
 
 ```bash

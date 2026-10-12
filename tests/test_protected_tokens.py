@@ -11,6 +11,7 @@ Run: .venv/bin/python -m pytest tests/ -q
 
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -256,105 +257,57 @@ def test_vad_gate_accepts_all_real_speech(pipeline):
 
 # ---------------------------------------------------------------- GUI invariant
 
-def test_gui_never_auto_pastes_unsafe_results():
-    """The GUI must not auto-paste review_required or rejected output.
+def _app_functions() -> dict[str, ast.FunctionDef]:
+    tree = ast.parse((REPO_ROOT / "scripts/whispern_app.py").read_text())
+    return {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
 
-    CLAUDE.md §4.2: never auto-paste a review_required result in
-    clinical_strict. This is a source-level check because the behaviour is a
-    branch in the render path, and a refactor could silently move the paste
-    call outside the SAFE guard.
+
+def _calls(fn: ast.FunctionDef) -> set[str]:
+    """Dotted names of everything `fn` calls, e.g. "self._copy", "clipboard.copy"."""
+    out = set()
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Call):
+            out.add(ast.unparse(n.func))
+    return out
+
+
+def test_gui_never_types_into_other_apps():
+    """Dictated text stays in WhisperN; the user pastes it themselves.
+
+    The app once activated the previous application and sent ⌘V through
+    System Events. That needed Accessibility, and a stale target sent test
+    markers into a terminal. The user removed it (2026-10-11). Checked on the
+    code, not the prose, so a docstring explaining the history cannot trip it.
     """
-    src = (REPO_ROOT / "scripts/whispern_app.py").read_text()
-
-    safe_branch = src.split("if result.outcome is Outcome.SAFE:")[1] \
-                     .split("# review_required")[0]
-    assert "self._paste" in safe_branch, "safe branch should offer paste"
-
-    review_branch = src.split("# review_required / rejected")[1].split("def ")[0]
-    assert "self._paste" not in review_branch, \
-        "review/rejected branch must never call _paste"
-    assert "self.root.after" not in review_branch, \
-        "review/rejected branch must not schedule a deferred paste"
+    tree = ast.parse((REPO_ROOT / "scripts/whispern_app.py").read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef)) \
+                and ast.get_docstring(node) is not None:
+            node.body = node.body[1:] or [ast.Pass()]
+    code = ast.unparse(tree)  # comments are dropped by the parse
+    for banned in ("osascript", "System Events", "keystroke", "frontmost",
+                   "paste_into", "FocusTracker", "_paste"):
+        assert banned not in code, f"whispern_app must not contain {banned!r}"
 
 
-def _paste_body() -> str:
-    """Source of _paste with its docstring removed.
+def test_gui_touches_the_clipboard_only_on_a_click():
+    """Nothing reaches the clipboard unless the user clicks Copy.
 
-    The docstring names withdraw() to explain why it must not be used, so the
-    guards below have to read the code rather than the prose.
+    Rendering a result -- safe, review, rejected, or rewrite -- must leave the
+    clipboard alone (CLAUDE.md §3.1: clipboard is a leakage path).
     """
-    src = (REPO_ROOT / "scripts/whispern_app.py").read_text()
-    fn = src.split("def _paste(")[1].split("\n    def ")[0]
-    parts = fn.split('"""')
-    return parts[2] if len(parts) >= 3 else fn
-
-
-def test_gui_paste_does_not_hide_the_window():
-    """_paste must not go back to yielding focus by hiding the window.
-
-    withdraw() does not transfer frontmost status, so the keystroke was
-    delivered to our own hidden window and discarded -- measured 0/9 at sleeps
-    from 250 ms to 1200 ms, while osascript still exited 0 and the UI showed a
-    green "Pasted". A refactor reaching for withdraw() again would silently
-    reintroduce a paste that reports success and does nothing.
-    """
-    body = _paste_body()
-    for banned in ("withdraw(", "deiconify("):
-        assert banned not in body, f"_paste must not call {banned}"
-
-
-def test_gui_paste_fails_closed_without_a_known_target():
-    """No target means no keystroke.
-
-    ⌘V is delivered to whatever is frontmost. Sending it without knowing where
-    it will land is how clinical text reaches the wrong window; during
-    development exactly this pasted test markers into a terminal. The guard
-    must come before paste_into() and must return.
-    """
-    body = _paste_body()
-
-    guard = body.index("if not target:")
-    call = body.index("paste_into(")
-    assert guard < call, "the no-target guard must precede paste_into()"
-    assert "return" in body[guard:call], "the no-target guard must return"
-
-
-def test_focus_tracker_never_targets_itself():
-    """Our own process must never become the paste target.
-
-    If it did, activating the 'target' would focus this window and ⌘V would
-    type the transcript into the app's own result box.
-    """
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-    from whispern_app import FocusTracker
-
-    t = FocusTracker(self_name="python3")
-    assert t.target is None
-
-    t.consider("python3")
-    assert t.target is None, "must not target our own process"
-    t.consider("")
-    assert t.target is None, "must not target an empty name"
-    t.consider(None)
-    assert t.target is None, "must not target a missing name"
-
-    t.consider("Notes")
-    assert t.target == "Notes"
-    t.consider("python3")
-    assert t.target == "Notes", "our own process must not clear a good target"
-
-
-def test_applescript_literals_are_escaped():
-    """An application name is interpolated into an AppleScript literal.
-
-    Names containing a quote or backslash would otherwise break out of the
-    string and change what the script does.
-    """
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-    from whispern_app import _as_literal
-
-    assert _as_literal('Fo"o') == 'Fo\\"o'
-    assert _as_literal("Fo\\o") == "Fo\\\\o"
+    fns = _app_functions()
+    allowed = {"copy_now", "copy_original", "_copy"}
+    for name, fn in fns.items():
+        if name in allowed:
+            continue
+        calls = _calls(fn)
+        assert "self._copy" not in calls, f"{name} must not copy on its own"
+        assert "clipboard.copy" not in calls, f"{name} must not copy on its own"
+    for name in ("_render", "_render_rewrite"):
+        assert name in fns, f"{name} missing; update this test"
+    assert "self._copy" in _calls(fns["copy_now"])
+    assert "self._copy" in _calls(fns["copy_original"])
 
 
 # ---------------------------------------------------------------- local vocabulary
